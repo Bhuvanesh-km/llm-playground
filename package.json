@@ -16,6 +16,7 @@
   "dependencies": {
     "@arcjet/next": "^1.11.0",
     "@base-ui/react": "^1.8.0",
+    "@clerk/nextjs": "^7.9.1",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0",

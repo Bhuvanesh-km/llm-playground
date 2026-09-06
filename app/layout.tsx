@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Archivo } from "next/font/google";
 
+import { AuthProvider } from "@/features/auth/clerk-provider";
+import { PostHogIdentify } from "@/features/auth/posthog-identify";
 import { ThemeProvider } from "@/features/theme/theme-provider";
 
 import "./globals.css";
@@ -33,8 +35,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // class onto <html> before React hydrates, so the server and client markup
     // legitimately differ on that one attribute.
     <html lang="en" suppressHydrationWarning className={`${archivo.variable} h-full`}>
+      {/* Clerk's provider belongs inside <body>, not wrapping <html>: older
+          Clerk examples wrap <html>, which is no longer correct. Theme sits
+          outside it because Clerk's appearance has to react to the resolved
+          theme, and that reads from ThemeProvider's context. */}
       <body className="flex min-h-full flex-col">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <PostHogIdentify />
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

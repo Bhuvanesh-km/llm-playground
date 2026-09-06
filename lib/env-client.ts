@@ -16,6 +16,7 @@ import { z } from "zod";
  */
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: z.string().min(1),
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
 });
 
 type ClientEnv = Readonly<z.infer<typeof clientEnvSchema>>;
@@ -28,6 +29,7 @@ const formatMissing = (error: z.ZodError): string => {
 const parseClientEnv = (): ClientEnv => {
   const result = clientEnvSchema.safeParse({
     NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   });
   if (!result.success) {
     throw new Error(formatMissing(result.error));

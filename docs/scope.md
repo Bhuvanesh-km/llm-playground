@@ -16,17 +16,17 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 
 ## At a glance
 
-| #   | Feature                                     | Phase      | Status                                                                                               |
-| --- | ------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
-| 1   | Connecting to a model                       | Foundation | 1a done; 1b: Arcjet + Prisma done, PostHog all but session replay, Clerk deferred to after feature 4 |
-| 2   | Coding standards & tooling                  | Foundation | done                                                                                                 |
-| 3   | Data model                                  | Foundation | done                                                                                                 |
-| 4   | Design & look                               | Foundation | done                                                                                                 |
-| 5   | Model picker                                | Slice 1    | not started                                                                                          |
-| 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started                                                                                          |
-| 7   | App shell & thread history                  | Slice 2    | not started                                                                                          |
-| 8   | Public thread visibility & sharing          | Slice 3    | not started                                                                                          |
-| 9   | Leaderboard: global & personal              | Slice 4    | not started                                                                                          |
+| #   | Feature                                     | Phase      | Status                   |
+| --- | ------------------------------------------- | ---------- | ------------------------ |
+| 1   | Connecting to a model                       | Foundation | done, bar session replay |
+| 2   | Coding standards & tooling                  | Foundation | done                     |
+| 3   | Data model                                  | Foundation | done                     |
+| 4   | Design & look                               | Foundation | done                     |
+| 5   | Model picker                                | Slice 1    | not started              |
+| 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started              |
+| 7   | App shell & thread history                  | Slice 2    | not started              |
+| 8   | Public thread visibility & sharing          | Slice 3    | not started              |
+| 9   | Leaderboard: global & personal              | Slice 4    | not started              |
 
 ## Foundation
 
@@ -117,15 +117,28 @@ Three things worth recording rather than leaving implicit:
 
 #### 1b build checklist, Clerk
 
-**Deliberately deferred until after feature 4, design & look.** Clerk ships visible sign-in and user-button UI, and building those screens before the palette and contrast rules exist would mean building them twice. Nothing else in 1b is blocked by this, and feature 4 does not depend on Clerk, so the order is safe. The one knock-on is that PostHog's identify step waits with it, because there is no user to identify until Clerk exists.
+Done. It was deliberately deferred until after feature 4, because Clerk ships visible sign-in and user-button UI and building those before the palette existed would have meant building them twice. That paid off: the sign-in card came out on the coffee palette first time.
 
-Not started. Nothing in the tree touches Clerk yet: `@clerk/nextjs` is not installed, there is no `proxy.ts`, and no source file imports or calls it. The only Clerk presence anywhere is prose in comments describing what feature 6 will eventually key its rate limit to.
+- [x] `@clerk/nextjs` 7.9.1.
+- [x] `clerkMiddleware` in **`proxy.ts` at the project root**, confirmed against Clerk's own documentation rather than guessed. Clerk's rule is to name the file by the `next` version: `proxy.ts` on 16 and above, `middleware.ts` on 15 and below. The build output listing `Proxy (Middleware)` is the proof it is picked up.
+- [x] `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` validated in `lib/env.ts`, the publishable key also in `lib/env-client.ts`. Both were already in `.env.local` with nothing reading them, so a wrong key failed silently.
+- [x] Clerk's provider in the root layout, **inside `<body>`**, not wrapping `<html>`. Older Clerk examples wrap `<html>`; that is no longer correct.
+- [x] `ensureCurrentUser()`, a lazy upsert onto the `User` table.
+- [x] `/sign-in` and `/sign-up` as catch-all routes, and a `UserButton` on the holding page.
+- [x] Typecheck, lint, and a real production build pass. The sign-in card was checked by hand in a browser in both themes.
 
-- [ ] `pnpm add @clerk/nextjs`
-- [ ] `clerkMiddleware` mounted in the right place for Next 16, read from Clerk's own official Next.js documentation rather than guessed. This is the risk already flagged above: Next 16 renamed `middleware.ts` to `proxy.ts`, and it must be confirmed against current docs, not from how it used to work.
-- [ ] `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` added to `lib/env.ts`'s schema. Both keys are already sitting in `.env.local` and `.env.example`, but nothing validates or reads them, so today a missing or wrong Clerk key fails silently, which the project's fail-fast rule forbids.
-- [ ] `<ClerkProvider>` in the root layout.
-- [ ] Typecheck, lint, build, and a real signed-in session confirmed by hand.
+**No route matcher, on purpose.** `clerkMiddleware()` runs bare, making `auth()` available everywhere and forcing a session nowhere. Feature 8 requires that anyone can open a thread's link without an account and that only sending a prompt and voting need signing in, so protection belongs on those two actions. A `createRouteMatcher` guard here would quietly break the shareable links that make the product shareable.
+
+**Lazy upsert rather than a Clerk webhook.** A webhook needs a publicly reachable URL, which does not exist in development, plus signature verification, all to keep a table in sync that nothing reads until a signed-in write happens. The row is needed at exactly two moments, creating a thread and casting a vote. `upsert` rather than find-then-create because two requests from one person can race and the unique index would make the loser throw.
+
+**Two things Clerk got wrong that had to be found by running it.**
+
+- `<SignedIn>` and `<SignedOut>` **do not exist in Clerk Core 3** and fail at prerender, not at typecheck. Both are replaced by a single `<Show when="signed-in">` / `<Show when="signed-out">`. Worth knowing that Clerk hides rather than omits the other branch, so anything that actually matters is checked on the server.
+- **Clerk does not repaint when the theme changes.** It resolves its colour scale once when the provider mounts and does not watch the `.dark` class, so flipping the theme left the sign-in card painted for the previous mode: washed out, with a button label that could not be read. The provider is now a client component that hands Clerk a fresh appearance object whenever the resolved theme changes, which is why ThemeProvider sits outside it in the layout. Verified by flipping the theme at runtime and watching the card repaint.
+
+**`colorNeutral` is the one literal in the appearance map.** Everything else points at a CSS custom property, so it follows the theme for free. Clerk derives a whole ramp of borders, muted backgrounds and secondary text from `colorNeutral` with `color-mix`, its docs warn a `var()` there can misbehave, and it has to invert between modes. It is passed per theme: our ink on light, our light ink on dark.
+
+**Still unverified, and it needs a person.** Nothing in production code calls `ensureCurrentUser` yet, because the writes that need it are feature 6, so the signed-in half cannot be exercised end to end. `/dev/auth-check` exists as the only thing that currently does, and should be deleted when feature 6 exercises the same path for real. Signed out it was confirmed by `curl`: no user, no row, and an anonymous analytics id.
 
 #### 1b build checklist, PostHog
 
@@ -137,7 +150,7 @@ Nearly done. Env validation and heatmaps are finished; two items remain. Session
 - [x] Real events firing from the chat route: `chat_request_received` and `chat_request_error`, the latter distinguishing an invalid body from an Arcjet denial.
 - [ ] **Session replay confirmed on, and the localhost trap dealt with.** Replay is only implied by `defaults: "2026-01-30"`, never set explicitly. Worse, reading the installed `posthog-js` 1.422.5 bundle shows that same defaults date also sets `internal_or_test_user_hostname` to `/^(localhost|127\.0\.0\.1)$/` and calls `setInternalOrTestUser()` when it matches. So every dev session on localhost is flagged as an internal test user, which is the most likely reason the setup wizard's own report found no recordings in its 30-day probe. Set `disable_session_recording: false` explicitly, decide deliberately whether localhost should stay excluded, and only then confirm a real recording lands.
 - [x] **Heatmaps on.** Confirmed by hand in the PostHog project settings, where the toggle is on. This was correctly a settings check and not a code change: the bundle resolves heatmaps as `capture_heatmaps`, falling back to `enable_heatmaps`, falling back to a value delivered by remote config, and both client flags are deliberately left unset so the project setting stays the single source of truth. Adding a client flag on top would only create a second place to disagree.
-- [ ] **Identify against the Clerk user.** Every server event is hardcoded to `distinctId: "anonymous"` and there is no `identify()` call anywhere, so nothing is attached to a real person. Blocked on Clerk, and should land in the same step.
+- [x] **Identify against the Clerk user.** The chat route resolves a distinct id once per request and attributes every event it emits to the same person; a signed-out visitor is explicitly `anonymous` rather than dropped, because the prompt-to-answer-to-vote funnel has to count them too. On the browser side `PostHogIdentify` calls `identify()` with the Clerk id and `reset()` on sign-out, so a shared machine does not hand the next visitor the previous person's identity. It waits on Clerk's `isLoaded`, since `userId` reads null while Clerk is still resolving and identifying on that would label a signed-in session anonymous for its first moments.
 - [x] **`NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST` validated and in `.env.example`.** Both are now in `lib/env.ts`'s schema, the host as `z.url()` rather than a bare string so a typo'd host fails on boot instead of sending events nowhere. `lib/posthog-server.ts` no longer reads `process.env`, no longer returns `null`, and no longer logs a silent-miss warning: it exports a real `posthog` client, which deleted all three `if (posthog)` guards in the chat route. A `globalThis` cache matches `lib/prisma.ts`, so hot reload stops leaking a client per edit.
 - [x] **A client-safe env module, and a `server-only` guard on the secret one.** Typecheck, lint, and a real production build all pass, and the fail-fast path was verified by hand rather than assumed: blanking the token and setting the host to `not-a-url` each fail the boot with the named variable. A real prompt still streams end to end and the malformed-body 400 still returns, both with no PostHog warning in the log.
 

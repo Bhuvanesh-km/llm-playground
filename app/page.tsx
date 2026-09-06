@@ -1,3 +1,4 @@
+import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,20 @@ export default function HomePage() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-8 px-6 py-16">
       <div className="flex items-start justify-between gap-6">
         <p className="text-display text-xl">LLM Arena</p>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          {/* Core 3 replaced SignedIn and SignedOut with one Show component.
+              Both branches are present in the served HTML and merely hidden, so
+              anything that actually matters is checked on the server. */}
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <Button variant="outline">Sign in</Button>
+            </SignInButton>
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -34,7 +48,9 @@ export default function HomePage() {
           Design reference
         </Link>
       </div>
-      <p className="text-muted-ink text-sm">The arena arrives with feature 6.</p>
+      <p className="text-muted-ink text-sm">
+        Reading a thread never needs an account. Sending a prompt and voting do.
+      </p>
     </main>
   );
 }
