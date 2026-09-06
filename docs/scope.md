@@ -16,17 +16,17 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 
 ## At a glance
 
-| #   | Feature                                     | Phase      | Status      |
-| --- | ------------------------------------------- | ---------- | ----------- |
+| #   | Feature                                     | Phase      | Status                                                                                               |
+| --- | ------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
 | 1   | Connecting to a model                       | Foundation | 1a done; 1b: Arcjet + Prisma done, PostHog all but session replay, Clerk deferred to after feature 4 |
-| 2   | Coding standards & tooling                  | Foundation | not started |
-| 3   | Data model                                  | Foundation | not started |
-| 4   | Design & look                               | Foundation | not started |
-| 5   | Model picker                                | Slice 1    | not started |
-| 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started |
-| 7   | App shell & thread history                  | Slice 2    | not started |
-| 8   | Public thread visibility & sharing          | Slice 3    | not started |
-| 9   | Leaderboard: global & personal              | Slice 4    | not started |
+| 2   | Coding standards & tooling                  | Foundation | not started                                                                                          |
+| 3   | Data model                                  | Foundation | not started                                                                                          |
+| 4   | Design & look                               | Foundation | not started                                                                                          |
+| 5   | Model picker                                | Slice 1    | not started                                                                                          |
+| 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started                                                                                          |
+| 7   | App shell & thread history                  | Slice 2    | not started                                                                                          |
+| 8   | Public thread visibility & sharing          | Slice 3    | not started                                                                                          |
+| 9   | Leaderboard: global & personal              | Slice 4    | not started                                                                                          |
 
 ## Foundation
 
@@ -91,7 +91,7 @@ Arcjet is the first piece of 1b to land. Clerk and PostHog are still open; Prism
 
 Two things worth recording rather than leaving implicit:
 
-- **Shield was not deferred, and the split above is corrected to say so.** 1b as originally written left *all* the rules, shield included, to feature 6. That was wrong once actually built. Shield is the always-on baseline against things like SQL injection, it needs no per-user identity to be meaningful, and it costs nothing to carry on every route, so holding it back would have meant mounting Arcjet and getting no protection from it. What genuinely belongs to feature 6 is the rate limit and bot detection, because the interesting version of both is keyed to a signed-in Clerk user and to a budget spanning all three models at once, and neither of those exists yet. Prompt-injection detection also waits for feature 6, since it is a rule about the prompt rather than about the connection.
+- **Shield was not deferred, and the split above is corrected to say so.** 1b as originally written left _all_ the rules, shield included, to feature 6. That was wrong once actually built. Shield is the always-on baseline against things like SQL injection, it needs no per-user identity to be meaningful, and it costs nothing to carry on every route, so holding it back would have meant mounting Arcjet and getting no protection from it. What genuinely belongs to feature 6 is the rate limit and bot detection, because the interesting version of both is keyed to a signed-in Clerk user and to a budget spanning all three models at once, and neither of those exists yet. Prompt-injection detection also waits for feature 6, since it is a rule about the prompt rather than about the connection.
 - **Shield does not block on the first bad request, by design.** It scores suspicion across several requests before it denies, which is why ten attack-shaped calls returned 200 and only the eleventh returned 403. That is correct behaviour, not a misconfiguration, and it is written down here so a future check of one hand-crafted malicious request does not read a 200 as proof that protection is broken.
 
 #### 1b build checklist, Prisma
@@ -144,7 +144,7 @@ Nearly done. Env validation and heatmaps are finished; two items remain. Session
 Three things worth recording rather than leaving implicit:
 
 - **`env.ts` could not simply grow the two variables, which is why there are now two env modules.** `NEXT_PUBLIC_*` values only reach the browser where the full `process.env.NEXT_PUBLIC_X` expression appears literally in the source; read through a validated object, a loop, or a spread, they are `undefined` at runtime. So `lib/env-client.ts` spells each key out by hand, while the server module keeps handing the whole of `process.env` to Zod. The two look inconsistent on purpose and the reason is commented in both.
-- **`lib/env.ts` now imports `server-only`, and that guard was tested, not assumed.** The module holds `OPENROUTER_API_KEY`, `ARCJET_KEY`, and `DATABASE_URL`, and nothing previously stopped a client component importing it and inlining all three into the browser bundle. Importing it from a client component now fails the build, naming the import chain. Worth knowing for anyone who repeats the check: an *unused* import is tree-shaken and the build passes, which looks like the guard is broken. It only fires when the value is actually referenced.
+- **`lib/env.ts` now imports `server-only`, and that guard was tested, not assumed.** The module holds `OPENROUTER_API_KEY`, `ARCJET_KEY`, and `DATABASE_URL`, and nothing previously stopped a client component importing it and inlining all three into the browser bundle. Importing it from a client component now fails the build, naming the import chain. Worth knowing for anyone who repeats the check: an _unused_ import is tree-shaken and the build passes, which looks like the guard is broken. It only fires when the value is actually referenced.
 - **`NEXT_PUBLIC_POSTHOG_HOST` is misnamed and was deliberately not renamed.** Only the server reads it; the browser posts to the `/ingest` rewrite and never touches it, so the `NEXT_PUBLIC_` prefix publishes a value that does not need publishing. Renaming means editing `.env.local`, which is not in the repo, so it is left alone and recorded here instead. Worth folding into the Clerk step, since that already touches env.
 - **PostHog arrived out of order, and that is why it is uneven.** It was wired by PostHog's own setup wizard during 1a rather than built as a deliberate 1b step, which is why the client init and the `/ingest` proxy are solid while env validation and user identity were never done. The remaining boxes above are exactly the difference between what the wizard installed and what 1b asked for. The `posthog-self-driving-report.md` at the repo root is from that same wizard run; it records Session Replay, Error Tracking, and Support being enabled on the PostHog side, which is server-side project configuration and separate from the client flags above.
 

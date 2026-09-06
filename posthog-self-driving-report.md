@@ -16,24 +16,24 @@ The PostHog GitHub App was already connected before this setup. No GitHub Issues
 
 ## Products enabled
 
-| Product | Result | Notes |
-| --- | --- | --- |
+| Product        | Result  | Notes                                                                                                                                                                                      |
+| -------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Session Replay | enabled | Web SDK initialization is compatible: no session-recording disable override is present. No recordings were found in the 30-day probe, so scanners would begin work when recordings arrive. |
-| Error Tracking | enabled | Browser initialization explicitly enables exception capture. No error-tracking issues were found in the probe. |
-| Support | enabled | Connect an inbound email, inbox, or Slack channel in PostHog before tickets can arrive. |
+| Error Tracking | enabled | Browser initialization explicitly enables exception capture. No error-tracking issues were found in the probe.                                                                             |
+| Support        | enabled | Connect an inbound email, inbox, or Slack channel in PostHog before tickets can arrive.                                                                                                    |
 
 ## Signal sources
 
-| source_product | source_type | Action | Source config ID |
-| --- | --- | --- | --- |
-| `signals_scout` | `cross_source_issue` | Enabled by default; no row is needed unless opting out. | — |
-| `health_checks` | `health_issue` | enabled | `01a05e03-f4e9-7155-b7e1-71873e7bbdaa` |
-| `error_tracking` | `issue_created` | enabled | `01a05e03-f50c-7d1c-952c-9faca36eec53` |
-| `error_tracking` | `issue_reopened` | enabled | `01a05e03-f4dc-7510-a727-b2bdbb69422f` |
-| `error_tracking` | `issue_spiking` | enabled | `01a05e03-f4e6-76a0-843e-5966cad69d9d` |
-| `conversations` | `ticket` | enabled | `01a05e03-f4ce-7452-80e0-f6acf0ec2197` |
-| `session_replay` | `session_analysis_cluster` | deliberately skipped; this retired source is not used. | — |
-| `replay_vision` | scanner findings | not configured; scanner API access failed (see Replay Vision scanners). | — |
+| source_product   | source_type                | Action                                                                  | Source config ID                       |
+| ---------------- | -------------------------- | ----------------------------------------------------------------------- | -------------------------------------- |
+| `signals_scout`  | `cross_source_issue`       | Enabled by default; no row is needed unless opting out.                 | —                                      |
+| `health_checks`  | `health_issue`             | enabled                                                                 | `01a05e03-f4e9-7155-b7e1-71873e7bbdaa` |
+| `error_tracking` | `issue_created`            | enabled                                                                 | `01a05e03-f50c-7d1c-952c-9faca36eec53` |
+| `error_tracking` | `issue_reopened`           | enabled                                                                 | `01a05e03-f4dc-7510-a727-b2bdbb69422f` |
+| `error_tracking` | `issue_spiking`            | enabled                                                                 | `01a05e03-f4e6-76a0-843e-5966cad69d9d` |
+| `conversations`  | `ticket`                   | enabled                                                                 | `01a05e03-f4ce-7452-80e0-f6acf0ec2197` |
+| `session_replay` | `session_analysis_cluster` | deliberately skipped; this retired source is not used.                  | —                                      |
+| `replay_vision`  | scanner findings           | not configured; scanner API access failed (see Replay Vision scanners). | —                                      |
 
 ## Connected tools
 
@@ -43,14 +43,14 @@ The connected-tools selection was cancelled, so no external responder was author
 
 The troop was materialized and uses the server default daily cadence.
 
-| Scout | State | Reason |
-| --- | --- | --- |
-| `signals-scout-general` | enabled | Covers cross-product correlations and otherwise-uncovered surfaces. |
-| `signals-scout-ai-observability` | enabled | The application uses OpenRouter via the AI SDK and records model, latency, token, and cost-related metrics. |
-| `signals-scout-product-analytics` | enabled | Prompt submission and streamed-completion behavior are core product flow signals. |
-| `signals-scout-error-tracking` | disabled | Covered by the native Error Tracking responder. |
-| `signals-scout-session-replay` | disabled | Covered by Replay Vision scanners when scanner access is available. |
-| Other 22 built-in specialists | disabled | Their product surfaces were not evidenced in this early-stage repository, or they are not among the highest-use surfaces. They can be enabled later from the inbox. |
+| Scout                             | State    | Reason                                                                                                                                                              |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `signals-scout-general`           | enabled  | Covers cross-product correlations and otherwise-uncovered surfaces.                                                                                                 |
+| `signals-scout-ai-observability`  | enabled  | The application uses OpenRouter via the AI SDK and records model, latency, token, and cost-related metrics.                                                         |
+| `signals-scout-product-analytics` | enabled  | Prompt submission and streamed-completion behavior are core product flow signals.                                                                                   |
+| `signals-scout-error-tracking`    | disabled | Covered by the native Error Tracking responder.                                                                                                                     |
+| `signals-scout-session-replay`    | disabled | Covered by Replay Vision scanners when scanner access is available.                                                                                                 |
+| Other 22 built-in specialists     | disabled | Their product surfaces were not evidenced in this early-stage repository, or they are not among the highest-use surfaces. They can be enabled later from the inbox. |
 
 - **Active scouts:** 3 of 27.
 - **Verified run budget:** 100 maximum runs per day; 0 used today; 100 remaining today.
@@ -72,15 +72,15 @@ A scanner is an LLM that watches individual session recordings on a schedule and
 
 Neither required monitor was created. Both the in-product scanner guide and the scanner inventory endpoint were inaccessible because scanner requests returned `INVALID_API_KEY`; no quota or spend estimate could be read. The current product also has no confirmed production completion route: `/dev/stream` is explicitly a temporary proof harness and the real parallel arena remains planned.
 
-| Brief | Planned name | Intended scope | Status | Sampling rate | Estimate |
-| --- | --- | --- | --- | --- | --- |
-| Breakage monitor | LLM Playground answer breakage | A future real model-answer completion route and immediate predecessors; no safe production route is implemented yet. | skipped — scanner API authentication failed and no production completion flow is available to scope. | 0.5 | Not available |
-| Frustration monitor | LLM Playground prompt frustration | `$rageclick` only, with no URL filter; this remains separate from the breakage monitor. | skipped — scanner API authentication failed. | 1.0 | Not available |
+| Brief               | Planned name                      | Intended scope                                                                                                       | Status                                                                                               | Sampling rate | Estimate      |
+| ------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------- | ------------- |
+| Breakage monitor    | LLM Playground answer breakage    | A future real model-answer completion route and immediate predecessors; no safe production route is implemented yet. | skipped — scanner API authentication failed and no production completion flow is available to scope. | 0.5           | Not available |
+| Frustration monitor | LLM Playground prompt frustration | `$rageclick` only, with no URL filter; this remains separate from the breakage monitor.                              | skipped — scanner API authentication failed.                                                         | 1.0           | Not available |
 
 ## Files modified or created
 
-| File | Change |
-| --- | --- |
+| File                             | Change                     |
+| -------------------------------- | -------------------------- |
 | `posthog-self-driving-report.md` | Created this setup report. |
 
 No existing repository source, configuration, or environment files were modified.

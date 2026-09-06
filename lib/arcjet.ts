@@ -35,14 +35,16 @@ export const toDenial = (decision: ArcjetDecision): Denial => {
   if (decision.reason.isRateLimit()) {
     return {
       status: 429,
-      message: "You're sending prompts faster than this app allows. Wait a moment, then try again.",
+      message:
+        "You're sending prompts faster than this app allows. Wait a moment, then try again.",
     };
   }
 
   if (decision.reason.isPromptInjection() || decision.reason.isSensitiveInfo()) {
     return {
       status: 400,
-      message: "That prompt was turned away by this app's safety checks. Try rewording it.",
+      message:
+        "That prompt was turned away by this app's safety checks. Try rewording it.",
     };
   }
 
