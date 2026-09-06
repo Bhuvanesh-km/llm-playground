@@ -1,3 +1,5 @@
+import { after } from "next/server";
+
 import { aj, toDenial } from "@/lib/arcjet";
 import { streamModelAnswer } from "@/features/chat/openrouter";
 import { chatRequestSchema } from "@/features/chat/request";
@@ -15,13 +17,19 @@ export const dynamic = "force-dynamic";
  */
 const ANONYMOUS = "anonymous";
 
-const captureRequestError = async (reason: string): Promise<void> => {
+/**
+ * Analytics is never on the critical path. `after` hands the flush to the
+ * runtime to finish once the response is on its way, so slow or unreachable
+ * PostHog ingestion cannot add latency to a denial, a validation failure, or
+ * the wait for the first token.
+ */
+const captureRequestError = (reason: string): void => {
   posthog.capture({
     distinctId: ANONYMOUS,
     event: "chat_request_error",
     properties: { reason },
   });
-  await posthog.flush();
+  after(() => posthog.flush());
 };
 
 /**
@@ -36,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = chatRequestSchema.safeParse(body);
 
   if (!parsed.success) {
-    await captureRequestError("invalid_request");
+    captureRequestError("invalid_request");
     return Response.json(
       { message: "That request didn't look right. Try sending the prompt again." },
       { status: 400 },
@@ -51,7 +59,7 @@ export async function POST(request: Request): Promise<Response> {
 
   if (decision.isDenied()) {
     const denial = toDenial(decision);
-    await captureRequestError("blocked");
+    captureRequestError("blocked");
     return Response.json({ message: denial.message }, { status: denial.status });
   }
 
@@ -69,7 +77,7 @@ export async function POST(request: Request): Promise<Response> {
       message_count: parsed.data.messages.length,
     },
   });
-  await posthog.flush();
+  after(() => posthog.flush());
 
   const events = streamModelAnswer(parsed.data, request.signal);
 
