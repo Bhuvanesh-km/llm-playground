@@ -1,0 +1,25 @@
+generator client {
+  // v7's generator. The old `prisma-client-js` is legacy and generates into
+  // node_modules, which breaks on a pnpm store; this one emits real source we
+  // control the location of.
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  // No `url` here: Prisma 7 requires the connection URL to live in
+  // prisma.config.ts for the CLI, and to reach the client through a driver
+  // adapter. See lib/prisma.ts.
+  provider = "postgresql"
+}
+
+/// TEMPORARY. This exists only to prove that migrations actually run against
+/// the live database and that writes come back. The real data model, users
+/// tied to Clerk, threads, per-model messages, and votes, is feature 3 in
+/// docs/scope.md and is not designed yet. Delete this model, and the migration
+/// that created it, when feature 3 lands.
+model ConnectionCheck {
+  id        String   @id @default(uuid())
+  note      String
+  createdAt DateTime @default(now())
+}
