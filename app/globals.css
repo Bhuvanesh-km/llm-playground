@@ -1,26 +1,225 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/**
+ * next-themes sets `class="dark"` on <html>, so the dark variant keys off that
+ * rather than the media query. Both modes are still reachable from the system
+ * preference; the class is what lets the toggle override it.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/**
+ * The design tokens. Every shared value in this app lives here, once.
+ *
+ * Two rules hold the palette together and are worth stating before the numbers:
+ *
+ * 1. Nothing is grey. Every neutral carries the same warm hue, roughly 20-34
+ *    degrees, so the whole surface reads as coffee rather than as a dark theme
+ *    with a brown tint dropped on top.
+ * 2. Rust means "you can touch this". Buttons, links, focus rings, the win-rate
+ *    bar, nothing else. Green marks a winner and only that. Red marks an error
+ *    and only that. A colour that decorates is a colour that stops meaning
+ *    anything.
+ *
+ * Every pairing was measured rather than eyeballed. The brief warned that a
+ * warm accent on a warm ground can blend into it, so the number that mattered
+ * most is rust against the page: 5.17:1 in dark, 4.96:1 in light. Body text is
+ * 15.05:1 and 13.33:1.
+ *
+ * Rust needs two values because no single one clears 4.5:1 on both a near-black
+ * brown and a light oat. That is the real cost of the brief's requirement that
+ * contrast hold up in both modes.
+ *
+ * The interactive colour is called `--rust`, not `--accent`, deliberately.
+ * shadcn ships its own `--accent`, meaning a subtle hover background, and when
+ * the two collided its installer silently overwrote this palette's accent with
+ * a neutral grey. Different name, no collision.
+ */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light: a toasted oat ground, deliberately deeper than the usual cream. */
+  --surface-page: #ede2d4;
+  --surface-panel: #f5ede3;
+  --surface-raised: #e3d5c3;
+  --border-subtle: #cdbaa3;
+  --border-strong: #a8927a;
+  --text-primary: #241a13;
+  --text-muted: #6b5748;
+  --rust: #a83c08;
+  --rust-hover: #8d3206;
+  --rust-contrast: #ffffff;
+  --winner: #2f6b34;
+  --danger: #a32217;
+
+  /**
+   * shadcn's semantic tokens, mapped onto the palette above rather than left on
+   * the grey scale its installer writes. Every value here is one of ours; none
+   * is a new colour. The chart ramp is warm on purpose: shadcn's default
+   * sidebar-primary is an indigo, and blue, indigo and purple are ruled out by
+   * the brief under any circumstance.
+   */
+  --background: var(--surface-page);
+  --foreground: var(--text-primary);
+  --card: var(--surface-panel);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-panel);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--rust);
+  --primary-foreground: var(--rust-contrast);
+  --secondary: var(--surface-raised);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface-raised);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-raised);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --border: var(--border-subtle);
+  --input: var(--border-subtle);
+  --ring: var(--rust);
+  --chart-1: #a83c08;
+  --chart-2: #6b5748;
+  --chart-3: #2f6b34;
+  --chart-4: #a8927a;
+  --chart-5: #7a4a1f;
+  --sidebar: var(--surface-panel);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--rust);
+  --sidebar-primary-foreground: var(--rust-contrast);
+  --sidebar-accent: var(--surface-raised);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--rust);
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  /* Dark: deep roast. The mode the product was designed for. */
+  --surface-page: #1b1310;
+  --surface-panel: #241a15;
+  --surface-raised: #2f221b;
+  --border-subtle: #3d2c23;
+  --border-strong: #523c30;
+  --text-primary: #f2e7de;
+  --text-muted: #bca491;
+  --rust: #e2601f;
+  --rust-hover: #f2762f;
+  --rust-contrast: #1b1310;
+  --winner: #5fa860;
+  --danger: #e2564a;
+
+  --chart-1: #e2601f;
+  --chart-2: #bca491;
+  --chart-3: #5fa860;
+  --chart-4: #8a6a55;
+  --chart-5: #f2762f;
 }
 
 @theme inline {
+  /* This app's own names. Used directly as `bg-page`, `text-ink`, `bg-rust`. */
+  --color-page: var(--surface-page);
+  --color-panel: var(--surface-panel);
+  --color-raised: var(--surface-raised);
+  --color-subtle: var(--border-subtle);
+  --color-strong: var(--border-strong);
+  --color-ink: var(--text-primary);
+  --color-muted-ink: var(--text-muted);
+  --color-rust: var(--rust);
+  --color-rust-hover: var(--rust-hover);
+  --color-rust-contrast: var(--rust-contrast);
+  --color-winner: var(--winner);
+  --color-danger: var(--danger);
+
+  /* shadcn's names, so its components resolve against the same palette. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-archivo);
+  --font-heading: var(--font-archivo);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-page text-ink;
+    font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+    /* The metrics update mid-stream. Tabular figures stop the digits jittering
+       as they change, which is why this app needs no monospace anywhere. */
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /**
+   * The expanded width, reserved for the wordmark and the big win-rate
+   * numerals and used nowhere else. It is the same variable font at a wider
+   * setting on its `wdth` axis, not a second family and not a second download.
+   * Used more widely it stops being an emphasis and becomes noise.
+   */
+  .text-display {
+    font-variation-settings: "wdth" 118;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /**
+   * One focus ring for the whole app, on the rust, offset so it stays legible
+   * against both a panel and a filled button. `:focus-visible` rather than
+   * `:focus`, so a mouse click does not leave a ring behind.
+   */
+  :focus-visible {
+    outline: 2px solid var(--rust);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Respect a stated preference for less motion, everywhere, with no
+     per-component opt-in to forget. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

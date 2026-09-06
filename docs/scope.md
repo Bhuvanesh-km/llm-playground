@@ -21,7 +21,7 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 | 1   | Connecting to a model                       | Foundation | 1a done; 1b: Arcjet + Prisma done, PostHog all but session replay, Clerk deferred to after feature 4 |
 | 2   | Coding standards & tooling                  | Foundation | done                                                                                                 |
 | 3   | Data model                                  | Foundation | done                                                                                                 |
-| 4   | Design & look                               | Foundation | not started                                                                                          |
+| 4   | Design & look                               | Foundation | done                                                                                                 |
 | 5   | Model picker                                | Slice 1    | not started                                                                                          |
 | 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started                                                                                          |
 | 7   | App shell & thread history                  | Slice 2    | not started                                                                                          |
@@ -220,8 +220,30 @@ All three unique constraints rejected a deliberate violation: a second vote on a
 
 A coffee or dark brown background, warm, not neutral gray or true black. One accent color, rust, used only for things you interact with, buttons, links, focus states, the win-rate bar, never as decoration. Because the background and the accent are both warm tones from the same family, the accent has to stay clearly brighter and more saturated than the background, enough that a button never blends into the page behind it, that's a real risk with two warm colors this close and worth checking by eye, not just by the numbers. Blue, indigo, and purple are never the accent, under any circumstance. Green is reserved only for marking a winner, red only for errors, never reused for anything else. Contrast should genuinely hold up in both light and dark mode, not just look fine at a glance.
 
-- [ ] Decide the approach
-- [ ] Build it
+- [x] Decide the approach
+- [x] Build it
+
+Tokens live in `app/globals.css` and nowhere else. `/dev/design` renders the whole system on one page so it can be judged by eye in both themes, which the brief asks for and which no contrast ratio settles on its own.
+
+#### The direction
+
+**A test bench, not a leaderboard game.** Three machines get the same task and are measured honestly. That framing is why the numbers get tabular alignment and the structure favours comparison over decoration.
+
+**Colour.** Every neutral carries the same warm hue, 20-34 degrees, so nothing anywhere is grey. Dark is the designed-for mode: page `#1B1310`, panels `#241A15`, text `#F2E7DE`, rust `#E2601F`. Light is a first-class alternate on a toasted oat ground `#EDE2D4` with a deeper rust `#A83C08`. Rust needs two values because no single one clears 4.5:1 on both grounds, which is the real cost of the brief's both-modes requirement.
+
+Measured rather than eyeballed. The number the brief specifically warned about, rust against the page, is **5.17:1 dark and 4.96:1 light**, so a button cannot melt into the ground. Body text 15.05:1 and 13.33:1, muted 7.72:1 and 5.33:1, winner green 5.88:1 and 5.53:1, error red 4.94:1 and 5.87:1.
+
+**Type.** Archivo, one variable family loaded once, using its own `wdth` axis for the expanded display treatment rather than a second download. Reserved for the wordmark and the big win-rate numerals only. Its tabular figures are why this design has **no monospace anywhere**: the metrics change mid-stream and the digits must not shift.
+
+**Layout: lanes, not cards.** Models sit in lanes divided by hairlines, with the metrics on a baseline shared across all three. Three separate rounded cards would put `ttft` on three different lines and defeat the only thing the screen exists for. On a narrow screen the lanes scroll sideways instead of stacking, because stacking destroys that shared baseline; the scroll is contained, so the page body never scrolls horizontally.
+
+#### Five things worth recording
+
+- **shadcn's installer silently broke the palette, and this is why the accent token is called `--rust`.** shadcn ships its own `--accent`, meaning a subtle hover background. The names collided and its init overwrote the interactive colour with `oklch(0.269 0 0)`, a pure grey. It also wrote `--sidebar-primary: oklch(0.488 0.243 264.376)`, an indigo, which the brief rules out under any circumstance. Every shadcn semantic token is now mapped onto this palette by hand, including a warm chart ramp, and the app's own accent has a name shadcn does not use.
+- **The brief overrode the design skill on one point, deliberately.** That skill flags warm-ground-plus-terracotta as the current tell of AI-generated design, naming `#D97757`. The brief mandates warm brown and rust and the brief wins, so the difference was made on the axes it left free: a saturated iron oxide rather than a soft clay, a deeper oat rather than the usual cream, no serif display, and no monospace.
+- **A dropped `await` is not the only thing type-aware tooling caught.** The `mounted` flag pattern the theme toggle first used tripped `react-hooks/set-state-in-effect`. It is now `useSyncExternalStore`, which states the same thing, returning false on the server and true on the client, with no state set from inside an effect.
+- **`app/globals.css` was overriding the fonts it loaded.** The starter file set `font-family: Arial` on `body`, which beat the font variables `layout.tsx` was loading, so the app rendered in Arial while downloading fonts it never used. The starter home page also used `bg-zinc-50` and `dark:bg-black`, a neutral grey and a true black, contradicting the brief on the one point it is most specific about. Both are gone.
+- **Mobile was verified by measurement, not by screenshot.** The browser window would not actually resize, so rather than claim a check that did not happen: at a 390px main, the lane group scrolls internally, 576px of content in a 340px container, and the page itself does not scroll sideways.
 
 ## Slice 1: Core arena loop
 
