@@ -150,6 +150,44 @@ export const fetchFreeModels = async (): Promise<CatalogueResult> => {
   }
 };
 
+export type ModelAllowed =
+  { readonly allowed: true } | { readonly allowed: false; readonly message: string };
+
+/**
+ * Whether this app is willing to send a prompt to a given model id.
+ *
+ * This is a spend control, not a validation nicety. The chat route calls
+ * OpenRouter with the server's own API key, so any model id that reaches it is
+ * billed to this account. Before this existed the only gate was "a non-empty
+ * string", which meant an unauthenticated caller could post the id of any paid
+ * frontier model and have it charged to us.
+ *
+ * It fails closed. If the catalogue cannot be reached the answer is no, because
+ * the alternative is letting an unchecked id through on exactly the request we
+ * are least able to reason about. The cost of that is small in practice: a
+ * request that cannot reach OpenRouter's catalogue is unlikely to reach its
+ * completions endpoint either.
+ */
+export const isModelAllowed = async (modelId: string): Promise<ModelAllowed> => {
+  const catalogue = await fetchFreeModels();
+
+  if (!catalogue.ok) {
+    return {
+      allowed: false,
+      message: "The model list is unavailable right now, so this prompt wasn't sent.",
+    };
+  }
+
+  if (!catalogue.models.some((model) => model.id === modelId)) {
+    return {
+      allowed: false,
+      message: "That model isn't one this arena can use.",
+    };
+  }
+
+  return { allowed: true };
+};
+
 /** How many models can answer one prompt at once. */
 export const MAX_SELECTED_MODELS = 3;
 

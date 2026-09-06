@@ -26,20 +26,35 @@ type ModelPickerProps = {
  * that filters a list you can already see is one accessory too many.
  */
 export const ModelPicker = ({ models, selectedIds, onChange }: ModelPickerProps) => {
-  const atCapacity = selectedIds.length >= MAX_SELECTED_MODELS;
-
-  const toggle = (id: string): void => {
-    if (selectedIds.includes(id)) {
-      onChange(selectedIds.filter((selected) => selected !== id));
-      return;
-    }
-    if (atCapacity) return;
-    onChange([...selectedIds, id]);
-  };
-
+  /**
+   * Only the selections that still exist in the catalogue.
+   *
+   * The catalogue is live and models leave it. Counting capacity from the raw
+   * `selectedIds` meant a departed model went on occupying a slot while having
+   * no chip to remove it by: three stale ids could show no removable chips,
+   * disable "Add model", and disable every replacement in the list, leaving the
+   * picker stuck with nothing selectable and nothing to undo.
+   */
   const selected = selectedIds
     .map((id) => models.find((model) => model.id === id))
     .filter((model): model is FreeModel => model !== undefined);
+
+  const droppedCount = selectedIds.length - selected.length;
+  const atCapacity = selected.length >= MAX_SELECTED_MODELS;
+
+  const toggle = (id: string): void => {
+    // Built from the surviving ids, so any that have left the catalogue are
+    // dropped by the next interaction rather than lingering invisibly and being
+    // sent to a model that is no longer there.
+    const live = selected.map((model) => model.id);
+
+    if (live.includes(id)) {
+      onChange(live.filter((selectedId) => selectedId !== id));
+      return;
+    }
+    if (live.length >= MAX_SELECTED_MODELS) return;
+    onChange([...live, id]);
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -124,6 +139,15 @@ export const ModelPicker = ({ models, selectedIds, onChange }: ModelPickerProps)
         // the most common way an interface stops explaining itself.
         <p className="text-muted-ink text-xs">
           Three at a time. Remove one to swap it out.
+        </p>
+      )}
+
+      {droppedCount > 0 && (
+        // Their selection changed without them touching it, so say so rather
+        // than letting a model quietly disappear from the row.
+        <p className="text-muted-ink text-xs">
+          {droppedCount === 1 ? "A model you" : `${droppedCount} models you`} had chosen{" "}
+          {droppedCount === 1 ? "is" : "are"} no longer available.
         </p>
       )}
     </div>

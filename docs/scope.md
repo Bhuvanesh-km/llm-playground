@@ -302,6 +302,13 @@ An "Add model" popover pulling OpenRouter's live free-tier list, sorted by conte
 
 **No search box.** Nineteen models fit in a scrollable list, and a field that filters a list you can already see is one accessory too many.
 
+**Two more found in review, both fixed here.**
+
+- **The chat route billed us for any model id it was handed.** `/api/chat` validated `modelId` as "a non-empty string" and never consulted the catalogue, then called OpenRouter with the server's own API key. An unauthenticated caller could post the id of any paid frontier model and have it charged to this account. The route now checks the id against the free catalogue before anything reaches the provider, and fails closed if the catalogue cannot be read, because letting an unchecked id through on exactly the request we can least reason about is the wrong way to fail. Verified: a paid id and a made-up id both return 400 with a plain sentence and zero provider calls, while a real free model still streams.
+- **A departed model could deadlock the picker.** Capacity counted raw `selectedIds`, but chips only rendered ids still in the catalogue, so three models leaving could show no removable chips while disabling "Add model" and every replacement, with nothing selectable and nothing to undo. Capacity now counts only surviving selections, stale ids are pruned on the next interaction rather than lingering invisibly and being sent to a model that is gone, and the person is told their selection changed rather than watching it silently shrink.
+
+**A note on how the first of those was checked.** The gate was confirmed by watching a paid id get refused with no provider call, not by letting one through. One paid request did reach OpenRouter during testing, against a stale dev server still running the unfixed code on another port; it errored rather than completing, so it should not have been billable, but it is recorded here rather than quietly omitted.
+
 ### 6. Send a prompt, parallel streams, and voting
 
 The heart of the product. One prompt goes to every selected model at once, each streaming and failing independently, so one being slow or down never blocks the others. Each answer shows its own real time-to-first-token, tokens per second, and total tokens. No cost shown, every model here is free tier, so it would always read zero. A vote only exists once two or more models have answered, and picking one writes exactly one vote and marks that answer as the winner, while every answer stays visible the whole time. A follow-up continues each model's own separate conversation.
