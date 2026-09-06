@@ -341,6 +341,24 @@ Every prompt sent, every answer finishing, and every vote cast should be tracked
 
 **The row is finalised in a `finally`.** Closing the tab aborts the request and cancels the generator, and without that the row would sit at STREAMING for ever, which 6b's vote rule would read as "still arriving" rather than "abandoned".
 
+#### Found once a real person used it
+
+**Some free models cannot be used at all, and they were the defaults.** A first prompt reported "This app isn't authorised to reach that model right now" on some lanes. Probing all nineteen free models directly against OpenRouter turned up three different causes hiding behind that one sentence:
+
+| Cause                                      | Models                                                                                        | Nature                       |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------- | ---------------------------- |
+| 403, "only available on agentic harnesses" | `thinkingmachines/inkling:free`, `inkling-small:free`                                         | Permanent for this app       |
+| 429, rate-limited upstream                 | `google/gemma-4-26b-a4b-it:free`, `google/gemma-4-31b-it:free`, `poolside/laguna-xs-2.1:free` | Transient                    |
+| HTTP 200 carrying an inline provider error | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`                                          | Transient, upstream capacity |
+
+The two permanently gated models have the **largest context windows in the catalogue**, so "default to the three largest contexts" put both of them in every new person's first prompt. Two of three lanes failed before anyone had done anything wrong.
+
+**The gate is not discoverable from the catalogue.** Every field on the gated models matches a working one, and the per-model endpoints API reports healthy endpoints. It is enforced only when a call is actually made, so no filter can predict it.
+
+**401 and 403 had been collapsed into one sentence, and they are not the same thing.** 401 is this app's own credentials being rejected, which affects every model and is ours to fix. 403 is the provider refusing one model to this app, and retrying never helps. The old wording invited someone to wait for something that was never going to start working. 403 now says the model will not accept requests from this app and to pick another.
+
+**Still open: what the defaults should be.** Ranking by context alone is what put two dead models in front of every new user. Recorded here rather than fixed unilaterally, because the sensible options differ in cost and none is obviously right.
+
 #### Two things found by running it
 
 - **Tokens per second was reporting numbers with nothing behind them.** A live call produced 117 tokens across a 29 millisecond window and a reported 4,034 tokens per second. That is not a fast model: some providers buffer the whole answer and deliver it in one chunk, so the first token and the last arrive together and the generating window is never observed. The leaderboard averages this figure, so one fabricated reading would poison a model's standing. It now returns null unless at least two deltas arrived and the window was at least 50ms. A genuine stream still reports normally.

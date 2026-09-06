@@ -9,8 +9,19 @@ import { APICallError, RetryError } from "ai";
 
 const byStatus = (status: number | undefined): string | null => {
   if (status === undefined) return null;
-  if (status === 401 || status === 403) {
+  // 401 and 403 look alike and are not. 401 is our own credentials being
+  // rejected, which is a configuration problem on this side and affects every
+  // model. 403 is the provider refusing this particular model to this app, and
+  // no amount of retrying changes it: OpenRouter's free tier gates some models
+  // to "agentic harnesses" only, and two of them happen to have the largest
+  // context windows in the catalogue, so they are the ones a person is most
+  // likely to reach for. Collapsing both into one sentence told someone to wait
+  // for something that was never going to start working.
+  if (status === 401) {
     return "This app isn't authorised to reach that model right now.";
+  }
+  if (status === 403) {
+    return "That model won't accept requests from this app. Pick another one.";
   }
   if (status === 404) {
     return "That model isn't available anymore.";
