@@ -77,7 +77,10 @@ export async function* runAnswer(
   let content = "";
   let metrics: StreamMetrics | null = null;
   let finishReason: string | null = null;
-  let failure: string | null = null;
+  let failure: {
+    readonly message: string;
+    readonly kind: "PERMANENT_REFUSAL" | "TRANSIENT";
+  } | null = null;
 
   try {
     for await (const event of streamModelAnswer(
@@ -87,7 +90,7 @@ export async function* runAnswer(
       if (event.type === "delta") content += event.text;
       if (event.type === "metrics") metrics = event.metrics;
       if (event.type === "done") finishReason = event.finishReason;
-      if (event.type === "error") failure = event.message;
+      if (event.type === "error") failure = { message: event.message, kind: event.kind };
       yield event;
     }
   } finally {
@@ -97,7 +100,10 @@ export async function* runAnswer(
       data: {
         content,
         status: failure !== null ? "FAILED" : aborted ? "ABORTED" : "COMPLETE",
-        errorMessage: failure,
+        errorMessage: failure?.message ?? null,
+        // Recorded so the picker can keep a model that will never answer out of
+        // the default selection. Null unless this actually failed.
+        failureKind: failure?.kind ?? null,
         finishReason,
         ...(metrics === null ? {} : persistMetrics(metrics)),
       },

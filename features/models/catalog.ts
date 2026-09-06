@@ -224,6 +224,23 @@ export const resolveFreeModels = async (
 /** How many models can answer one prompt at once. */
 export const MAX_SELECTED_MODELS = 3;
 
-/** The arena opens with the three largest contexts already chosen. */
-export const defaultSelection = (models: readonly FreeModel[]): readonly string[] =>
-  models.slice(0, MAX_SELECTED_MODELS).map((model) => model.id);
+/**
+ * The arena opens with the three largest contexts already chosen, skipping any
+ * model that has most recently refused this app outright.
+ *
+ * That exclusion is not a nicety. The two largest context windows in the
+ * catalogue belong to models OpenRouter gates to agentic harnesses, so ranking
+ * by context alone put two lanes that could never answer in front of every new
+ * person's first prompt. Excluded models remain selectable by hand.
+ */
+export const defaultSelection = (
+  models: readonly FreeModel[],
+  unavailableIds: ReadonlySet<string> = new Set(),
+): readonly string[] => {
+  const usable = models.filter((model) => !unavailableIds.has(model.id));
+  // If everything is excluded, something is wrong with our own setup rather
+  // than with every model at once, so fall back to the plain ranking instead of
+  // opening an arena with no models in it.
+  const pool = usable.length > 0 ? usable : models;
+  return pool.slice(0, MAX_SELECTED_MODELS).map((model) => model.id);
+};

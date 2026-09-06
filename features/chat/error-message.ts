@@ -7,6 +7,23 @@ import { APICallError, RetryError } from "ai";
  * the card, so the sentence says what happened, not what to click.
  */
 
+/**
+ * Whether a failure says anything about the model itself.
+ *
+ * PERMANENT_REFUSAL is a claim with consequences: it takes a model out of the
+ * default selection. So it is reserved for the two statuses that really are
+ * about this model and this app, 403 and 404.
+ *
+ * 401 is deliberately not one of them, and the distinction matters more than it
+ * looks. A rejected API key returns 401 for every model in the catalogue, so
+ * treating it as permanent would empty the arena of every default in a single
+ * bad deploy, from a fault that has nothing to do with any model.
+ */
+export type FailureKind = "PERMANENT_REFUSAL" | "TRANSIENT";
+
+const kindByStatus = (status: number | undefined): FailureKind =>
+  status === 403 || status === 404 ? "PERMANENT_REFUSAL" : "TRANSIENT";
+
 const byStatus = (status: number | undefined): string | null => {
   if (status === undefined) return null;
   // 401 and 403 look alike and are not. 401 is our own credentials being
@@ -44,16 +61,35 @@ const byStatus = (status: number | undefined): string | null => {
 const unwrap = (error: unknown): unknown =>
   RetryError.isInstance(error) ? error.lastError : error;
 
-export const toHumanErrorMessage = (error: unknown): string => {
+export type DescribedFailure = {
+  /** The one thing a person ever sees. */
+  readonly message: string;
+  /** The one thing the app acts on. */
+  readonly kind: FailureKind;
+};
+
+export const describeFailure = (error: unknown): DescribedFailure => {
   if (error instanceof DOMException && error.name === "AbortError") {
-    return "This answer was stopped before it finished.";
+    return {
+      message: "This answer was stopped before it finished.",
+      kind: "TRANSIENT",
+    };
   }
 
   const cause = unwrap(error);
 
   if (APICallError.isInstance(cause)) {
-    return byStatus(cause.statusCode) ?? "That model couldn't be reached.";
+    return {
+      message: byStatus(cause.statusCode) ?? "That model couldn't be reached.",
+      kind: kindByStatus(cause.statusCode),
+    };
   }
 
-  return "Something went wrong getting this answer.";
+  return {
+    message: "Something went wrong getting this answer.",
+    kind: "TRANSIENT",
+  };
 };
+
+export const toHumanErrorMessage = (error: unknown): string =>
+  describeFailure(error).message;

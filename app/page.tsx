@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PromptComposer } from "@/features/arena/prompt-composer";
 import { ensureCurrentUser } from "@/features/auth/current-user";
 import { fetchFreeModels } from "@/features/models/catalog";
+import { permanentlyRefusedModelIds } from "@/features/models/availability";
 import { ThemeToggle } from "@/features/theme/theme-toggle";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,11 @@ export const dynamic = "force-dynamic";
  * the new thread once the rows exist.
  */
 export default async function HomePage() {
-  const [user, catalogue] = await Promise.all([ensureCurrentUser(), fetchFreeModels()]);
+  const [user, catalogue, refused] = await Promise.all([
+    ensureCurrentUser(),
+    fetchFreeModels(),
+    permanentlyRefusedModelIds(),
+  ]);
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-8 px-6 py-12">
@@ -53,6 +58,7 @@ export default async function HomePage() {
         <PromptComposer
           models={catalogue.models}
           threadId={null}
+          unavailableModelIds={[...refused]}
           canSend={user !== null}
         />
       ) : (

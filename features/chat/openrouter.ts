@@ -3,7 +3,7 @@ import { streamText } from "ai";
 
 import { serverEnv } from "@/lib/env";
 
-import { toHumanErrorMessage } from "./error-message";
+import { describeFailure, type DescribedFailure } from "./error-message";
 import type { ChatStreamEvent, StreamMetrics } from "./stream-events";
 
 /**
@@ -139,7 +139,7 @@ export async function* streamModelAnswer(
   let deltaCount = 0;
   let usage: UsageSnapshot = noUsage;
   let finishReason = "unknown";
-  let failure: string | null = null;
+  let failure: DescribedFailure | null = null;
 
   try {
     const result = streamText({
@@ -184,23 +184,23 @@ export async function* streamModelAnswer(
       // than by throwing, so it has to be handled here as well as in `catch`.
       if (part.type === "error") {
         logModelFailure(request.modelId, part.error);
-        failure = toHumanErrorMessage(part.error);
+        failure = describeFailure(part.error);
         break;
       }
 
       if (part.type === "abort") {
-        failure = toHumanErrorMessage(new DOMException("Aborted", "AbortError"));
+        failure = describeFailure(new DOMException("Aborted", "AbortError"));
         break;
       }
     }
   } catch (error) {
     logModelFailure(request.modelId, error);
-    failure = toHumanErrorMessage(error);
+    failure = describeFailure(error);
   }
 
   yield { type: "metrics", metrics: buildMetrics(ttftMs, since(), usage, deltaCount) };
 
   yield failure === null
     ? { type: "done", finishReason }
-    : { type: "error", message: failure };
+    : { type: "error", message: failure.message, kind: failure.kind };
 }

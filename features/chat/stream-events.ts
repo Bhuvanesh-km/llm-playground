@@ -28,7 +28,12 @@ export type ChatStreamEvent =
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "metrics"; readonly metrics: StreamMetrics }
   | { readonly type: "done"; readonly finishReason: string }
-  | { readonly type: "error"; readonly message: string };
+  | {
+      readonly type: "error";
+      readonly message: string;
+      /** So the row records why, not just that. See `AnswerFailureKind`. */
+      readonly kind: "PERMANENT_REFUSAL" | "TRANSIENT";
+    };
 
 const metricsSchema = z.object({
   ttftMs: z.number().nullable(),
@@ -44,7 +49,11 @@ const chatStreamEventSchema: z.ZodType<ChatStreamEvent> = z.discriminatedUnion("
   z.object({ type: z.literal("delta"), text: z.string() }),
   z.object({ type: z.literal("metrics"), metrics: metricsSchema }),
   z.object({ type: z.literal("done"), finishReason: z.string() }),
-  z.object({ type: z.literal("error"), message: z.string() }),
+  z.object({
+    type: z.literal("error"),
+    message: z.string(),
+    kind: z.enum(["PERMANENT_REFUSAL", "TRANSIENT"]),
+  }),
 ]);
 
 /**

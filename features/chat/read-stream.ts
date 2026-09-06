@@ -73,7 +73,14 @@ export async function* streamChat(
         )
         .catch(() => null);
 
-      yield { type: "error", message: message ?? "That model couldn't be reached." };
+      // Always TRANSIENT here and below. Everything this function can detect is
+      // a fault between the browser and this app, and none of it says anything
+      // about the model, so none of it may take a model out of the defaults.
+      yield {
+        type: "error",
+        message: message ?? "That model couldn't be reached.",
+        kind: "TRANSIENT",
+      };
       return;
     }
 
@@ -93,7 +100,11 @@ export async function* streamChat(
     }
 
     if (!sawTerminalEvent) {
-      yield { type: "error", message: "That answer stopped partway through." };
+      yield {
+        type: "error",
+        message: "That answer stopped partway through.",
+        kind: "TRANSIENT",
+      };
     }
   } catch (error) {
     yield {
@@ -102,6 +113,7 @@ export async function* streamChat(
         error instanceof DOMException && error.name === "AbortError"
           ? "This answer was stopped before it finished."
           : "The connection to that model dropped.",
+      kind: "TRANSIENT",
     };
   }
 }

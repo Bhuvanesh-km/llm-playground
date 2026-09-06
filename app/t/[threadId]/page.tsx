@@ -4,6 +4,7 @@ import { ensureCurrentUser } from "@/features/auth/current-user";
 import { PromptComposer } from "@/features/arena/prompt-composer";
 import { ThreadView, type ThreadTurn } from "@/features/arena/thread-view";
 import { fetchFreeModels } from "@/features/models/catalog";
+import { permanentlyRefusedModelIds } from "@/features/models/availability";
 import { ThemeToggle } from "@/features/theme/theme-toggle";
 import { prisma } from "@/lib/prisma";
 
@@ -18,7 +19,11 @@ export const dynamic = "force-dynamic";
  */
 export default async function ThreadPage({ params }: PageProps<"/t/[threadId]">) {
   const { threadId } = await params;
-  const [user, catalogue] = await Promise.all([ensureCurrentUser(), fetchFreeModels()]);
+  const [user, catalogue, refused] = await Promise.all([
+    ensureCurrentUser(),
+    fetchFreeModels(),
+    permanentlyRefusedModelIds(),
+  ]);
 
   const thread = await prisma.thread.findUnique({
     where: { id: threadId },
@@ -72,6 +77,7 @@ export default async function ThreadPage({ params }: PageProps<"/t/[threadId]">)
           // A follow-up keeps whoever answered last, so continuing a
           // conversation does not silently change who is in it.
           initialSelection={lastTurn?.answers.map((answer) => answer.modelId)}
+          unavailableModelIds={[...refused]}
           canSend
         />
       )}

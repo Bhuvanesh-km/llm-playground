@@ -20,16 +20,19 @@ export const PromptComposer = ({
   models,
   threadId,
   initialSelection,
+  unavailableModelIds,
   canSend,
 }: {
   readonly models: readonly FreeModel[];
   readonly threadId: string | null;
   readonly initialSelection?: readonly string[];
+  /** Models whose last attempt was an outright refusal; skipped in defaults. */
+  readonly unavailableModelIds?: readonly string[];
   readonly canSend: boolean;
 }) => {
   const [prompt, setPrompt] = useState("");
   const [selectedIds, setSelectedIds] = useState<readonly string[]>(
-    () => initialSelection ?? defaultSelection(models),
+    () => initialSelection ?? defaultSelection(models, new Set(unavailableModelIds)),
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();

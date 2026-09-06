@@ -88,6 +88,22 @@ enum AnswerStatus {
   ABORTED
 }
 
+/// Why an answer failed, in a form code can act on.
+///
+/// The human sentence in `errorMessage` is for a person; this is for the app.
+/// Without it the only record of a failure was prose, and prose is not
+/// something the model picker can filter on.
+enum AnswerFailureKind {
+  /// The provider will not serve this model to this app, and retrying does not
+  /// help. OpenRouter gates some free models to agentic harnesses only, and two
+  /// of those have the largest context windows in the catalogue, so ranking
+  /// defaults by context alone put permanently dead models in front of every
+  /// new person.
+  PERMANENT_REFUSAL
+  /// Busy, out of capacity, timed out, cancelled. Worth trying again.
+  TRANSIENT
+}
+
 model Answer {
   id     String @id @default(uuid())
   turnId String
@@ -105,6 +121,10 @@ model Answer {
   /// The plain sentence shown to the person when `status` is FAILED. Never a
   /// stack trace, never raw provider text.
   errorMessage String?
+  /// Set only when `status` is FAILED. Deliberately not derived from
+  /// `errorMessage`: matching on a sentence written for a person is exactly the
+  /// kind of thing that breaks the next time the wording improves.
+  failureKind  AnswerFailureKind?
   finishReason String?
 
   /// Measured on the server the moment the first content delta arrived, so it
@@ -131,6 +151,9 @@ model Answer {
   @@unique([turnId, modelId])
   /// Every leaderboard number groups by model and filters on status.
   @@index([modelId, status])
+  /// Reading each model's most recent outcome, to keep models that will never
+  /// answer out of the default selection.
+  @@index([modelId, createdAt])
 }
 
 /// One turn's winner.

@@ -357,7 +357,17 @@ The two permanently gated models have the **largest context windows in the catal
 
 **401 and 403 had been collapsed into one sentence, and they are not the same thing.** 401 is this app's own credentials being rejected, which affects every model and is ours to fix. 403 is the provider refusing one model to this app, and retrying never helps. The old wording invited someone to wait for something that was never going to start working. 403 now says the model will not accept requests from this app and to pick another.
 
-**Still open: what the defaults should be.** Ranking by context alone is what put two dead models in front of every new user. Recorded here rather than fixed unilaterally, because the sensible options differ in cost and none is obviously right.
+**Fixed by learning from failures rather than by a hardcoded list.** `Answer` gained a `failureKind`, and the default selection skips any model whose most recent attempt was a `PERMANENT_REFUSAL`. Excluded models stay selectable by hand, both because a list that silently hides options is worse than one that ranks them, and because hiding is how a recovered model would never get the one call it needs to prove itself.
+
+Three details that decide whether this is safe:
+
+- **Only 403 and 404 count as permanent.** A 401 is deliberately excluded, and the distinction matters more than it looks: a rejected API key returns 401 for every model in the catalogue, so treating it as permanent would empty the arena of every default from a fault that has nothing to do with any model.
+- **Everything the browser can detect is transient.** A dropped connection or a cancelled read says nothing about a model, so none of it can take one out of the defaults.
+- **It reads the latest attempt per model, not any failure in a window.** A model that starts working is back in the defaults on its next success, rather than being punished for a bad afternoon.
+
+If every model were somehow excluded the ranking falls back to plain context order, because an arena with no models in it is a worse answer than a wrong default.
+
+**Historical failures were backfilled once, scoped by model id rather than by matching the old error text.** The previous copy used one sentence for both 401 and 403, so reading that prose could have marked the whole catalogue as permanently refused. The two ids were confirmed against OpenRouter directly at the time. Verified afterwards on the real database: the home page now opens with MiniMax M3 and the two working NVIDIA models, and neither Inkling appears.
 
 #### Two things found by running it
 
