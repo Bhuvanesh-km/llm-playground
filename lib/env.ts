@@ -21,6 +21,8 @@ const serverEnvSchema = z.object({
   // See the note in env-client.ts.
   NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: z.string().min(1),
   NEXT_PUBLIC_POSTHOG_HOST: z.url(),
+  CLERK_SECRET_KEY: z.string().min(1),
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
 });
 
 type ServerEnv = Readonly<z.infer<typeof serverEnvSchema>>;

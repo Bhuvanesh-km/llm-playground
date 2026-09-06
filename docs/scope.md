@@ -16,17 +16,17 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 
 ## At a glance
 
-| #   | Feature                                     | Phase      | Status                                                                                               |
-| --- | ------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
-| 1   | Connecting to a model                       | Foundation | 1a done; 1b: Arcjet + Prisma done, PostHog all but session replay, Clerk deferred to after feature 4 |
-| 2   | Coding standards & tooling                  | Foundation | done                                                                                                 |
-| 3   | Data model                                  | Foundation | done                                                                                                 |
-| 4   | Design & look                               | Foundation | not started                                                                                          |
-| 5   | Model picker                                | Slice 1    | not started                                                                                          |
-| 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started                                                                                          |
-| 7   | App shell & thread history                  | Slice 2    | not started                                                                                          |
-| 8   | Public thread visibility & sharing          | Slice 3    | not started                                                                                          |
-| 9   | Leaderboard: global & personal              | Slice 4    | not started                                                                                          |
+| #   | Feature                                     | Phase      | Status                   |
+| --- | ------------------------------------------- | ---------- | ------------------------ |
+| 1   | Connecting to a model                       | Foundation | done, bar session replay |
+| 2   | Coding standards & tooling                  | Foundation | done                     |
+| 3   | Data model                                  | Foundation | done                     |
+| 4   | Design & look                               | Foundation | done                     |
+| 5   | Model picker                                | Slice 1    | not started              |
+| 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started              |
+| 7   | App shell & thread history                  | Slice 2    | not started              |
+| 8   | Public thread visibility & sharing          | Slice 3    | not started              |
+| 9   | Leaderboard: global & personal              | Slice 4    | not started              |
 
 ## Foundation
 
@@ -117,15 +117,34 @@ Three things worth recording rather than leaving implicit:
 
 #### 1b build checklist, Clerk
 
-**Deliberately deferred until after feature 4, design & look.** Clerk ships visible sign-in and user-button UI, and building those screens before the palette and contrast rules exist would mean building them twice. Nothing else in 1b is blocked by this, and feature 4 does not depend on Clerk, so the order is safe. The one knock-on is that PostHog's identify step waits with it, because there is no user to identify until Clerk exists.
+Done. It was deliberately deferred until after feature 4, because Clerk ships visible sign-in and user-button UI and building those before the palette existed would have meant building them twice. That paid off: the sign-in card came out on the coffee palette first time.
 
-Not started. Nothing in the tree touches Clerk yet: `@clerk/nextjs` is not installed, there is no `proxy.ts`, and no source file imports or calls it. The only Clerk presence anywhere is prose in comments describing what feature 6 will eventually key its rate limit to.
+- [x] `@clerk/nextjs` 7.9.1.
+- [x] `clerkMiddleware` in **`proxy.ts` at the project root**, confirmed against Clerk's own documentation rather than guessed. Clerk's rule is to name the file by the `next` version: `proxy.ts` on 16 and above, `middleware.ts` on 15 and below. The build output listing `Proxy (Middleware)` is the proof it is picked up.
+- [x] `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` validated in `lib/env.ts`, the publishable key also in `lib/env-client.ts`. Both were already in `.env.local` with nothing reading them, so a wrong key failed silently.
+- [x] Clerk's provider in the root layout, **inside `<body>`**, not wrapping `<html>`. Older Clerk examples wrap `<html>`; that is no longer correct.
+- [x] `ensureCurrentUser()`, a lazy upsert onto the `User` table.
+- [x] `/sign-in` and `/sign-up` as catch-all routes, and a `UserButton` on the holding page.
+- [x] Typecheck, lint, and a real production build pass. The sign-in card was checked by hand in a browser in both themes.
 
-- [ ] `pnpm add @clerk/nextjs`
-- [ ] `clerkMiddleware` mounted in the right place for Next 16, read from Clerk's own official Next.js documentation rather than guessed. This is the risk already flagged above: Next 16 renamed `middleware.ts` to `proxy.ts`, and it must be confirmed against current docs, not from how it used to work.
-- [ ] `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` added to `lib/env.ts`'s schema. Both keys are already sitting in `.env.local` and `.env.example`, but nothing validates or reads them, so today a missing or wrong Clerk key fails silently, which the project's fail-fast rule forbids.
-- [ ] `<ClerkProvider>` in the root layout.
-- [ ] Typecheck, lint, build, and a real signed-in session confirmed by hand.
+**No route matcher, on purpose.** `clerkMiddleware()` runs bare, making `auth()` available everywhere and forcing a session nowhere. Feature 8 requires that anyone can open a thread's link without an account and that only sending a prompt and voting need signing in, so protection belongs on those two actions. A `createRouteMatcher` guard here would quietly break the shareable links that make the product shareable.
+
+**Lazy upsert rather than a Clerk webhook.** A webhook needs a publicly reachable URL, which does not exist in development, plus signature verification, all to keep a table in sync that nothing reads until a signed-in write happens. The row is needed at exactly two moments, creating a thread and casting a vote. `upsert` rather than find-then-create because two requests from one person can race and the unique index would make the loser throw.
+
+**Two things Clerk got wrong that had to be found by running it.**
+
+- `<SignedIn>` and `<SignedOut>` **do not exist in Clerk Core 3** and fail at prerender, not at typecheck. Both are replaced by a single `<Show when="signed-in">` / `<Show when="signed-out">`. Worth knowing that Clerk hides rather than omits the other branch, so anything that actually matters is checked on the server.
+- **Clerk does not repaint when the theme changes.** It resolves its colour scale once when the provider mounts and does not watch the `.dark` class, so flipping the theme left the sign-in card painted for the previous mode: washed out, with a button label that could not be read. The provider is now a client component that hands Clerk a fresh appearance object whenever the resolved theme changes, which is why ThemeProvider sits outside it in the layout. Verified by flipping the theme at runtime and watching the card repaint.
+
+**`colorNeutral` is the one literal in the appearance map.** Everything else points at a CSS custom property, so it follows the theme for free. Clerk derives a whole ramp of borders, muted backgrounds and secondary text from `colorNeutral` with `color-mix`, its docs warn a `var()` there can misbehave, and it has to invert between modes. It is passed per theme: our ink on light, our light ink on dark.
+
+**Three things a code review caught, all fixed.**
+
+- **`/dev/auth-check` was a public diagnostic that wrote to the database.** It answered any caller, returned the total number of registered users, and performed a Prisma upsert on a GET, and nothing about being under `/dev/` stopped it shipping. It now 404s outside development, verified against a real production server, and even in development it reports only the caller's own row rather than a count of everyone.
+- **Every signed-out visitor shared the literal distinct id `anonymous`.** That merged them all into one PostHog person, so the funnel counted a single impossibly busy user instead of many real ones, and none of it joined up with what those browsers reported under their own ids. Server events now key off the id posthog-js already keeps in its cookie, so anonymous visitors stay distinct from each other and correlate with their own client events. When there is no cookie yet the event carries a throwaway id and `$process_person_profile: false`, so it still counts in the funnel without inventing a person.
+- **The theme toggle carried `role="radiogroup"` and a comment promising arrow-key movement, while implementing only click handling.** All three buttons were separate tab stops and the arrows did nothing, so the markup promised a keyboard contract the component did not honour, against this project's full-keyboard-operation rule. It now uses a roving tabindex: one tab stop, arrows moving both focus and selection with wrap-around, and Home and End. Verified with real key presses in a browser.
+
+**Still unverified, and it needs a person.** Nothing in production code calls `ensureCurrentUser` yet, because the writes that need it are feature 6, so the signed-in half cannot be exercised end to end. `/dev/auth-check` exists as the only thing that currently does, and should be deleted when feature 6 exercises the same path for real. Signed out it was confirmed by `curl`: no user, no row, and an anonymous analytics id.
 
 #### 1b build checklist, PostHog
 
@@ -137,7 +156,7 @@ Nearly done. Env validation and heatmaps are finished; two items remain. Session
 - [x] Real events firing from the chat route: `chat_request_received` and `chat_request_error`, the latter distinguishing an invalid body from an Arcjet denial.
 - [ ] **Session replay confirmed on, and the localhost trap dealt with.** Replay is only implied by `defaults: "2026-01-30"`, never set explicitly. Worse, reading the installed `posthog-js` 1.422.5 bundle shows that same defaults date also sets `internal_or_test_user_hostname` to `/^(localhost|127\.0\.0\.1)$/` and calls `setInternalOrTestUser()` when it matches. So every dev session on localhost is flagged as an internal test user, which is the most likely reason the setup wizard's own report found no recordings in its 30-day probe. Set `disable_session_recording: false` explicitly, decide deliberately whether localhost should stay excluded, and only then confirm a real recording lands.
 - [x] **Heatmaps on.** Confirmed by hand in the PostHog project settings, where the toggle is on. This was correctly a settings check and not a code change: the bundle resolves heatmaps as `capture_heatmaps`, falling back to `enable_heatmaps`, falling back to a value delivered by remote config, and both client flags are deliberately left unset so the project setting stays the single source of truth. Adding a client flag on top would only create a second place to disagree.
-- [ ] **Identify against the Clerk user.** Every server event is hardcoded to `distinctId: "anonymous"` and there is no `identify()` call anywhere, so nothing is attached to a real person. Blocked on Clerk, and should land in the same step.
+- [x] **Identify against the Clerk user.** The chat route resolves a distinct id once per request and attributes every event it emits to the same person; a signed-out visitor is explicitly `anonymous` rather than dropped, because the prompt-to-answer-to-vote funnel has to count them too. On the browser side `PostHogIdentify` calls `identify()` with the Clerk id and `reset()` on sign-out, so a shared machine does not hand the next visitor the previous person's identity. It waits on Clerk's `isLoaded`, since `userId` reads null while Clerk is still resolving and identifying on that would label a signed-in session anonymous for its first moments.
 - [x] **`NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST` validated and in `.env.example`.** Both are now in `lib/env.ts`'s schema, the host as `z.url()` rather than a bare string so a typo'd host fails on boot instead of sending events nowhere. `lib/posthog-server.ts` no longer reads `process.env`, no longer returns `null`, and no longer logs a silent-miss warning: it exports a real `posthog` client, which deleted all three `if (posthog)` guards in the chat route. A `globalThis` cache matches `lib/prisma.ts`, so hot reload stops leaking a client per edit.
 - [x] **A client-safe env module, and a `server-only` guard on the secret one.** Typecheck, lint, and a real production build all pass, and the fail-fast path was verified by hand rather than assumed: blanking the token and setting the host to `not-a-url` each fail the boot with the named variable. A real prompt still streams end to end and the malformed-body 400 still returns, both with no PostHog warning in the log.
 
@@ -220,8 +239,30 @@ All three unique constraints rejected a deliberate violation: a second vote on a
 
 A coffee or dark brown background, warm, not neutral gray or true black. One accent color, rust, used only for things you interact with, buttons, links, focus states, the win-rate bar, never as decoration. Because the background and the accent are both warm tones from the same family, the accent has to stay clearly brighter and more saturated than the background, enough that a button never blends into the page behind it, that's a real risk with two warm colors this close and worth checking by eye, not just by the numbers. Blue, indigo, and purple are never the accent, under any circumstance. Green is reserved only for marking a winner, red only for errors, never reused for anything else. Contrast should genuinely hold up in both light and dark mode, not just look fine at a glance.
 
-- [ ] Decide the approach
-- [ ] Build it
+- [x] Decide the approach
+- [x] Build it
+
+Tokens live in `app/globals.css` and nowhere else. `/dev/design` renders the whole system on one page so it can be judged by eye in both themes, which the brief asks for and which no contrast ratio settles on its own.
+
+#### The direction
+
+**A test bench, not a leaderboard game.** Three machines get the same task and are measured honestly. That framing is why the numbers get tabular alignment and the structure favours comparison over decoration.
+
+**Colour.** Every neutral carries the same warm hue, 20-34 degrees, so nothing anywhere is grey. Dark is the designed-for mode: page `#1B1310`, panels `#241A15`, text `#F2E7DE`, rust `#E2601F`. Light is a first-class alternate on a toasted oat ground `#EDE2D4` with a deeper rust `#A83C08`. Rust needs two values because no single one clears 4.5:1 on both grounds, which is the real cost of the brief's both-modes requirement.
+
+Measured rather than eyeballed. The number the brief specifically warned about, rust against the page, is **5.17:1 dark and 4.96:1 light**, so a button cannot melt into the ground. Body text 15.05:1 and 13.33:1, muted 7.72:1 and 5.33:1, winner green 5.88:1 and 5.53:1, error red 4.94:1 and 5.87:1.
+
+**Type.** Archivo, one variable family loaded once, using its own `wdth` axis for the expanded display treatment rather than a second download. Reserved for the wordmark and the big win-rate numerals only. Its tabular figures are why this design has **no monospace anywhere**: the metrics change mid-stream and the digits must not shift.
+
+**Layout: lanes, not cards.** Models sit in lanes divided by hairlines, with the metrics on a baseline shared across all three. Three separate rounded cards would put `ttft` on three different lines and defeat the only thing the screen exists for. On a narrow screen the lanes scroll sideways instead of stacking, because stacking destroys that shared baseline; the scroll is contained, so the page body never scrolls horizontally.
+
+#### Five things worth recording
+
+- **shadcn's installer silently broke the palette, and this is why the accent token is called `--rust`.** shadcn ships its own `--accent`, meaning a subtle hover background. The names collided and its init overwrote the interactive colour with `oklch(0.269 0 0)`, a pure grey. It also wrote `--sidebar-primary: oklch(0.488 0.243 264.376)`, an indigo, which the brief rules out under any circumstance. Every shadcn semantic token is now mapped onto this palette by hand, including a warm chart ramp, and the app's own accent has a name shadcn does not use.
+- **The brief overrode the design skill on one point, deliberately.** That skill flags warm-ground-plus-terracotta as the current tell of AI-generated design, naming `#D97757`. The brief mandates warm brown and rust and the brief wins, so the difference was made on the axes it left free: a saturated iron oxide rather than a soft clay, a deeper oat rather than the usual cream, no serif display, and no monospace.
+- **A dropped `await` is not the only thing type-aware tooling caught.** The `mounted` flag pattern the theme toggle first used tripped `react-hooks/set-state-in-effect`. It is now `useSyncExternalStore`, which states the same thing, returning false on the server and true on the client, with no state set from inside an effect.
+- **`app/globals.css` was overriding the fonts it loaded.** The starter file set `font-family: Arial` on `body`, which beat the font variables `layout.tsx` was loading, so the app rendered in Arial while downloading fonts it never used. The starter home page also used `bg-zinc-50` and `dark:bg-black`, a neutral grey and a true black, contradicting the brief on the one point it is most specific about. Both are gone.
+- **Mobile was verified by measurement, not by screenshot.** The browser window would not actually resize, so rather than claim a check that did not happen: at a 390px main, the lane group scrolls internally, 576px of content in a 340px container, and the page itself does not scroll sideways.
 
 ## Slice 1: Core arena loop
 
