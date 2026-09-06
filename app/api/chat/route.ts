@@ -29,7 +29,10 @@ const captureRequestError = async (reason: string): Promise<void> => {
  * each answer streams and fails entirely on its own.
  */
 export async function POST(request: Request): Promise<Response> {
-  const body = await request.json().catch(() => null);
+  // `Request.json()` is typed `any`. This body is untrusted input and the very
+  // next line hands it to Zod, so it is narrowed to `unknown` here rather than
+  // letting `any` leak into the handler.
+  const body: unknown = await request.json().catch(() => null);
   const parsed = chatRequestSchema.safeParse(body);
 
   if (!parsed.success) {

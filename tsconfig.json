@@ -5,6 +5,10 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    // Indexing an array or record can miss, and `strict` alone does not say so.
+    // The stream reader already treats `parts[parts.length - 1]` as possibly
+    // absent, so this locks in a property the code already has.
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",

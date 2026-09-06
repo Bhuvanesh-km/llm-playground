@@ -1,0 +1,8 @@
+# Formatting and auto-fixable lint run on the staged files only, and are
+# re-staged, so a whitespace slip never bounces a commit.
+pnpm exec lint-staged
+
+# The typecheck is deliberately whole-project and deliberately not auto-fixed.
+# A type error in a file you did not touch is still a broken commit, and
+# `tsc` has no --fix: this is the part that is meant to block.
+pnpm exec tsc --noEmit

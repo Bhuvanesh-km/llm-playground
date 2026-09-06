@@ -110,7 +110,7 @@ export default function StreamProofPage() {
       </p>
 
       <p>
-        <button type="button" onClick={send} disabled={isStreaming}>
+        <button type="button" onClick={() => void send()} disabled={isStreaming}>
           Send
         </button>{" "}
         <button type="button" onClick={stop} disabled={!isStreaming}>
@@ -121,7 +121,7 @@ export default function StreamProofPage() {
       {error !== null && (
         <p role="alert">
           {error}{" "}
-          <button type="button" onClick={send}>
+          <button type="button" onClick={() => void send()}>
             Try again
           </button>
         </p>
