@@ -19,7 +19,7 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 | #   | Feature                                     | Phase      | Status                                                                                               |
 | --- | ------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
 | 1   | Connecting to a model                       | Foundation | 1a done; 1b: Arcjet + Prisma done, PostHog all but session replay, Clerk deferred to after feature 4 |
-| 2   | Coding standards & tooling                  | Foundation | not started                                                                                          |
+| 2   | Coding standards & tooling                  | Foundation | done                                                                                                 |
 | 3   | Data model                                  | Foundation | not started                                                                                          |
 | 4   | Design & look                               | Foundation | not started                                                                                          |
 | 5   | Model picker                                | Slice 1    | not started                                                                                          |
@@ -152,8 +152,26 @@ Three things worth recording rather than leaving implicit:
 
 Write down the real conventions for this project once it actually exists, then install linting, formatting, and a pre-commit hook that actually enforces them.
 
-- [ ] Decide the approach
-- [ ] Install lint, format, and whatever else is needed, and write it up in a coding-standards doc
+- [x] Decide the approach
+- [x] Install lint, format, and whatever else is needed, and write it up in a coding-standards doc
+
+The standards themselves live in `docs/coding-standards.md`, not here. `pnpm check` is the contract: formatter, linter, typechecker, and exactly what the pre-commit hook enforces. `pnpm fix` repairs everything repairable.
+
+#### Build checklist
+
+- [x] Prettier at `printWidth: 90`, chosen by measuring where the codebase already sat rather than picking a round number. Only five files needed reformatting as a result. `eslint-config-prettier` loads last so ESLint stops policing layout, and Prettier is deliberately not run as an ESLint rule.
+- [x] A type-aware ESLint layer on top of `eslint-config-next`, plus `no-param-reassign`, `consistent-type-imports`, and `no-unused-vars` raised from warn to error.
+- [x] `noUncheckedIndexedAccess` in `tsconfig.json`. The code already satisfied it, so this locks in a property rather than starting a migration.
+- [x] husky + lint-staged, with `format`, `fix`, and `check` scripts.
+- [x] `docs/coding-standards.md`.
+- [x] Verified by hand, not assumed: `pnpm check` and a real production build pass, and a deliberately broken file proved both halves of the hook — Prettier reformatted and re-staged it, then the whole-project typecheck blocked the commit.
+
+Four things worth recording rather than leaving implicit:
+
+- **Turning on type-aware linting found four real defects on its first run, and all four were fixed rather than suppressed.** `request.json()` is typed `any` and was leaking it into the chat handler, so the untrusted body is now `unknown` and narrowed by Zod. A type assertion in `read-stream.ts` was hiding that an `in` narrowing had already proved the type. Two async `onClick` handlers on the proof page returned floating promises. This is the argument for the layer in one line: 86 existing rules, none of which could see any of it.
+- **The dropped-`await` risk is the specific reason the layer exists.** The server awaits `posthog.flush()` before a route handler tears down and drives model answers through async generators. A forgotten await there does not throw, it silently loses an event or truncates an answer, and only a type-aware rule can see it.
+- **One rule from `CLAUDE.md` is deliberately prose-only, and this is a correction to it.** "Prefer `map`/`filter`/`reduce` over mutating loops" is real as a preference but wrong as a lint rule. `read-stream.ts` and `openrouter.ts` consume streams with `for await...of` and a `for(;;)` reader loop, which is the correct way to drive an async iterator. A rule banning loops would flag correct code and train everyone to reach for `eslint-disable`, which is worse than no rule.
+- **Vendored skills under `.agents/` and `.claude/` are excluded from Prettier.** They sync from upstream, this project does not own their style, and reformatting them would conflict on the next sync. The first formatting run touched seventeen of them before this was caught.
 
 ### 3. Data model
 
