@@ -20,7 +20,7 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 | --- | ------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
 | 1   | Connecting to a model                       | Foundation | 1a done; 1b: Arcjet + Prisma done, PostHog all but session replay, Clerk deferred to after feature 4 |
 | 2   | Coding standards & tooling                  | Foundation | done                                                                                                 |
-| 3   | Data model                                  | Foundation | not started                                                                                          |
+| 3   | Data model                                  | Foundation | done                                                                                                 |
 | 4   | Design & look                               | Foundation | not started                                                                                          |
 | 5   | Model picker                                | Slice 1    | not started                                                                                          |
 | 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started                                                                                          |
@@ -177,8 +177,44 @@ Four things worth recording rather than leaving implicit:
 
 The core things every feature depends on: users tied to Clerk, threads, each model's own messages inside a thread, and votes. A vote should only ever be possible on a turn where two or more models actually answered.
 
-- [ ] Decide the approach
-- [ ] Build it
+- [x] Decide the approach
+- [x] Build it
+
+Five tables: `User`, `Thread`, `Turn`, `Answer`, `Vote`. See `prisma/schema.prisma`, where every non-obvious choice is commented at the field it affects.
+
+#### Build checklist
+
+- [x] `User`, with a unique `clerkUserId`. Nothing writes it until Clerk lands after feature 4; it exists now because every other table needs somewhere to point.
+- [x] `Thread`, owned by a user, with no visibility flag.
+- [x] `Turn`, one prompt sent to one to three models, with a `(threadId, index)` unique constraint.
+- [x] `Answer`, one model's reply, carrying an `AnswerStatus` enum and the full metric set, unique on `(turnId, modelId)`.
+- [x] `Vote`, unique on `turnId`, pointing at the winning answer.
+- [x] The additive migration, dropping `ConnectionCheck` forward rather than rewriting applied history.
+- [x] Verified against the live database with a seeded scenario, then deleted.
+
+**`Turn` is a table rather than a flat message list** because it is the unit three separate things hinge on: a vote belongs to a turn, the two-or-more rule is a property of a turn, and the sketch's per-thread record counts votable turns. Replaying one model's own conversation is still simple: every turn's prompt, plus that model's own answers, in `index` order.
+
+**There is no `Model` table, on purpose.** `modelId` is an OpenRouter string from a catalogue that changes underneath us, which this project has already been bitten by once: the proof page's default model id had silently stopped existing. A `Model` table would need syncing against a moving list. Instead each `Answer` carries `modelId` plus a `modelName` snapshot, so a leaderboard row for a model that has since dropped off the free tier can still name itself.
+
+**The two-or-more rule is application logic, not a database constraint, and this is written down rather than implied.** Postgres cannot express "this row may exist only if two sibling rows completed" without a trigger. What the database really guarantees is one vote per turn, one answer per model per turn, one turn per index, and cascading deletes. Feature 6 owns the rule itself.
+
+**Voting is owner-only**, which is what makes `Vote.turnId` unique rather than `(turnId, voterId)`. Feature 8 gives the owner "the ability to actually use it" while everyone else only reads. If voting should ever open to any signed-in viewer, that is a one-line change, and it is far cheaper now than once real votes exist.
+
+**A failed answer is not counted as a lost opportunity.** The leaderboard aggregation filters on `status = 'COMPLETE'`, so a model whose provider fell over does not take a loss for a turn it never got to compete in. Same for a turn where only one model was selected: no vote, so no opportunity for anyone.
+
+#### How it was verified
+
+A temporary route seeded a real scenario and then ran the actual leaderboard aggregation over it, rather than only checking that the migration applied. The thread held three turns: one single-model turn, one three-way turn with a vote, and one where a model failed and the survivor won. Every number came out right, including the two exclusions:
+
+| Model       | Record     | Why                                                                |
+| ----------- | ---------- | ------------------------------------------------------------------ |
+| Alpha One   | won 1 of 1 | Won the three-way. Its unvoted turn and its failure both excluded. |
+| Beta Two    | won 1 of 2 | Lost the three-way, won after Alpha failed.                        |
+| Gamma Three | won 0 of 1 | Only appeared in the three-way.                                    |
+
+All three unique constraints rejected a deliberate violation: a second vote on a turn, the same model answering twice, and two turns claiming one index. Deleting the user cascaded away every row, and all five tables were confirmed empty afterwards.
+
+**A correction to feature 2, found while verifying this one.** `tsc` cannot resolve Next's generated route and layout types on its own. Deleting `.next/` made `pnpm check` fail with `Cannot find name 'LayoutProps'`, which means a fresh clone would have failed the pre-commit hook with an error pointing nowhere near the real problem. `next typegen` now runs inside both `pnpm typecheck` and the hook, and the cold-start path was verified by deleting `.next/` and running the check again.
 
 ### 4. Design & look
 
@@ -192,6 +228,8 @@ A coffee or dark brown background, warm, not neutral gray or true black. One acc
 ### 5. Model picker
 
 An "Add model" popover pulling OpenRouter's live free-tier list, sorted by context window, capped at three models, defaulting to all three selected, with removable chips next to the prompt box. Also render that same catalog as a simple `/models` page, name, context window, and pricing for each one, so anyone can browse the full list without opening the picker.
+
+**This feature also owns a security hole that is open until it lands.** `/api/chat` today accepts any nonempty `modelId` and passes it straight to OpenRouter under the server API key, so an unauthenticated caller could name a _paid_ model and bill it to the account. A code review raised it against `features/chat/request.ts`; an interim guard (a `:free` suffix check, or a hardcoded allowlist) was considered and deliberately rejected, because it would be a second source of truth that this feature has to delete again. The catalog is the fix: once it exists, the route must validate `modelId` against the fetched free-tier list server-side and reject anything else, and that validation is not optional polish, it is the whole reason to defer the guard.
 
 - [ ] Decide the approach
 - [ ] Build it
