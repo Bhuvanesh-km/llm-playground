@@ -60,7 +60,7 @@ export async function* streamChat(
         .json()
         .then((body: unknown) =>
           typeof body === "object" && body !== null && "message" in body
-            ? String((body as { message: unknown }).message)
+            ? String(body.message)
             : null,
         )
         .catch(() => null);
