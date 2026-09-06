@@ -138,6 +138,12 @@ Done. It was deliberately deferred until after feature 4, because Clerk ships vi
 
 **`colorNeutral` is the one literal in the appearance map.** Everything else points at a CSS custom property, so it follows the theme for free. Clerk derives a whole ramp of borders, muted backgrounds and secondary text from `colorNeutral` with `color-mix`, its docs warn a `var()` there can misbehave, and it has to invert between modes. It is passed per theme: our ink on light, our light ink on dark.
 
+**Three things a code review caught, all fixed.**
+
+- **`/dev/auth-check` was a public diagnostic that wrote to the database.** It answered any caller, returned the total number of registered users, and performed a Prisma upsert on a GET, and nothing about being under `/dev/` stopped it shipping. It now 404s outside development, verified against a real production server, and even in development it reports only the caller's own row rather than a count of everyone.
+- **Every signed-out visitor shared the literal distinct id `anonymous`.** That merged them all into one PostHog person, so the funnel counted a single impossibly busy user instead of many real ones, and none of it joined up with what those browsers reported under their own ids. Server events now key off the id posthog-js already keeps in its cookie, so anonymous visitors stay distinct from each other and correlate with their own client events. When there is no cookie yet the event carries a throwaway id and `$process_person_profile: false`, so it still counts in the funnel without inventing a person.
+- **The theme toggle carried `role="radiogroup"` and a comment promising arrow-key movement, while implementing only click handling.** All three buttons were separate tab stops and the arrows did nothing, so the markup promised a keyboard contract the component did not honour, against this project's full-keyboard-operation rule. It now uses a roving tabindex: one tab stop, arrows moving both focus and selection with wrap-around, and Home and End. Verified with real key presses in a browser.
+
 **Still unverified, and it needs a person.** Nothing in production code calls `ensureCurrentUser` yet, because the writes that need it are feature 6, so the signed-in half cannot be exercised end to end. `/dev/auth-check` exists as the only thing that currently does, and should be deleted when feature 6 exercises the same path for real. Signed out it was confirmed by `curl`: no user, no row, and an anonymous analytics id.
 
 #### 1b build checklist, PostHog

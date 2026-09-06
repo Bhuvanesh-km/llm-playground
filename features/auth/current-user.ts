@@ -1,7 +1,9 @@
 import "server-only";
 
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 
+import { serverEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -31,13 +33,66 @@ export const ensureCurrentUser = async (): Promise<{ id: string } | null> => {
   });
 };
 
+export type AnalyticsIdentity = {
+  readonly distinctId: string;
+  /**
+   * False tells PostHog to record the event without creating or updating a
+   * person profile. Used only when there is genuinely no way to tell one
+   * visitor from another, so the event still counts in the funnel but does not
+   * invent a person.
+   */
+  readonly processPersonProfile: boolean;
+};
+
 /**
- * Who to attribute an analytics event to. PostHog needs a stable id for every
- * event, so a signed-out visitor is explicitly "anonymous" rather than being
- * dropped: the prompt-to-answer-to-vote funnel has to count the people who
- * never signed in too, or it measures the wrong thing.
+ * posthog-js keeps its own device id in a cookie named for the project token.
+ * Reading it lets a server event carry the very same id the browser is already
+ * using, which is the only way an anonymous visitor's client and server events
+ * end up on one timeline.
  */
-export const analyticsDistinctId = async (): Promise<string> => {
+const posthogCookieDistinctId = async (): Promise<string | null> => {
+  const jar = await cookies();
+  const raw = jar.get(`ph_${serverEnv.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN}_posthog`)?.value;
+  if (raw === undefined) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(raw));
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const id = (parsed as { distinct_id?: unknown }).distinct_id;
+    return typeof id === "string" && id.length > 0 ? id : null;
+  } catch {
+    // A malformed cookie is not worth failing a request over. Fall through to
+    // an un-profiled event rather than guessing at an identity.
+    return null;
+  }
+};
+
+/**
+ * Who to attribute a server-side analytics event to.
+ *
+ * An earlier version returned the literal string "anonymous" for everyone who
+ * was not signed in. That merged every signed-out visitor into a single PostHog
+ * person, so the funnel counted one impossibly busy user instead of many real
+ * ones, and none of it joined up with what those same browsers were reporting
+ * under their own ids.
+ *
+ * The order matters. A signed-in person is keyed by their Clerk id, which is
+ * also what the browser calls `identify()` with, so both halves agree. A
+ * signed-out visitor is keyed by the id posthog-js already put in its cookie,
+ * which keeps visitors apart and correlates with their client events. Only when
+ * neither exists, a first request before the browser SDK has written anything,
+ * does the event get a throwaway id and skip person processing entirely.
+ */
+export const analyticsIdentity = async (): Promise<AnalyticsIdentity> => {
   const { userId } = await auth();
-  return userId ?? "anonymous";
+  if (userId !== null) {
+    return { distinctId: userId, processPersonProfile: true };
+  }
+
+  const cookieId = await posthogCookieDistinctId();
+  if (cookieId !== null) {
+    return { distinctId: cookieId, processPersonProfile: true };
+  }
+
+  return { distinctId: crypto.randomUUID(), processPersonProfile: false };
 };
