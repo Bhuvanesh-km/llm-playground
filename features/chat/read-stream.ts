@@ -32,6 +32,15 @@ async function* frames(body: ReadableStream<Uint8Array>): AsyncGenerator<string>
         yield frame;
       }
     }
+
+    // A stream that ends here left something in the buffer: either a final
+    // frame that arrived without its trailing separator, which is still a whole
+    // frame, or a frame the connection cut in half, which parses to nothing and
+    // is dropped downstream. Either way it must not be silently discarded.
+    const tail = buffer + decoder.decode();
+    if (tail.length > 0) {
+      yield tail;
+    }
   } finally {
     reader.releaseLock();
   }
@@ -69,10 +78,23 @@ export async function* streamChat(
       return;
     }
 
+    // Every stream has to end on a `done` or an `error`, because that terminal
+    // event is what tells a caller the answer is complete rather than still
+    // arriving. A connection that closes cleanly partway through delivers
+    // neither, so a truncated answer is reported as the failure it is instead
+    // of being presented as a finished one.
+    let sawTerminalEvent = false;
+
     for await (const frame of frames(response.body)) {
       for (const event of eventsInFrame(frame)) {
+        sawTerminalEvent =
+          sawTerminalEvent || event.type === "done" || event.type === "error";
         yield event;
       }
+    }
+
+    if (!sawTerminalEvent) {
+      yield { type: "error", message: "That answer stopped partway through." };
     }
   } catch (error) {
     yield {
