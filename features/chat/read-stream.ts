@@ -1,4 +1,3 @@
-import type { ChatRequest } from "./request";
 import { parseStreamEvent, type ChatStreamEvent } from "./stream-events";
 
 const FRAME_SEPARATOR = "\n\n";
@@ -53,14 +52,14 @@ async function* frames(body: ReadableStream<Uint8Array>): AsyncGenerator<string>
  * renders one failed card and never has to wrap this in a try block.
  */
 export async function* streamChat(
-  request: ChatRequest,
+  answerId: string,
   abortSignal: AbortSignal,
 ): AsyncGenerator<ChatStreamEvent> {
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
+      body: JSON.stringify({ answerId }),
       signal: abortSignal,
     });
 

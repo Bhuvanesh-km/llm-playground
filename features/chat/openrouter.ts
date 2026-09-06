@@ -4,8 +4,21 @@ import { streamText } from "ai";
 import { serverEnv } from "@/lib/env";
 
 import { toHumanErrorMessage } from "./error-message";
-import type { ChatRequest } from "./request";
 import type { ChatStreamEvent, StreamMetrics } from "./stream-events";
+
+/**
+ * What one provider call needs. Deliberately not the wire request: the browser
+ * sends only an answer id, and the server decides which model runs and what
+ * conversation it sees. Keeping these separate is what stops a client-supplied
+ * field ever reaching the provider again.
+ */
+export type ModelCall = {
+  readonly modelId: string;
+  readonly messages: readonly {
+    readonly role: "user" | "assistant";
+    readonly content: string;
+  }[];
+};
 
 /**
  * `strict` compatibility is what tells the provider it is talking to the real
@@ -33,19 +46,40 @@ const noUsage: UsageSnapshot = {
 const orNull = (value: number | undefined): number | null => value ?? null;
 
 /**
+ * A generating window narrower than this is not a measurement, it is the gap
+ * between two packets arriving.
+ */
+const MIN_MEASURABLE_GENERATING_MS = 50;
+
+/**
  * Tokens per second measures generation speed, so it divides output tokens by
  * the time spent generating, not by the whole call. The wait for the first
  * token is already reported on its own as time-to-first-token, and counting it
  * twice would make a slow-to-start model look slow to generate as well.
+ *
+ * It returns null whenever that window was never really observed, which is not
+ * a rare edge case: some providers buffer the whole answer and deliver it in a
+ * single chunk, so the first token and the last arrive together. A live call
+ * during 6a produced 117 tokens across a 29ms window and a reported 4,034
+ * tokens per second, which is not a fast model, it is a number with nothing
+ * behind it. The leaderboard averages this figure, so one fabricated reading
+ * poisons a model's standing.
+ *
+ * Two conditions, because either alone lets a bad number through: at least two
+ * deltas, so a gap between tokens was actually seen rather than inferred from a
+ * single packet, and a window wide enough that the reading is not dominated by
+ * network jitter. Null is honest here in a way that a large number is not.
  */
 const tokensPerSecond = (
   outputTokens: number | null,
   ttftMs: number | null,
   elapsedMs: number,
+  deltaCount: number,
 ): number | null => {
   if (outputTokens === null || ttftMs === null) return null;
+  if (deltaCount < 2) return null;
   const generatingMs = elapsedMs - ttftMs;
-  if (generatingMs <= 0) return null;
+  if (generatingMs < MIN_MEASURABLE_GENERATING_MS) return null;
   return (outputTokens * 1000) / generatingMs;
 };
 
@@ -53,13 +87,14 @@ const buildMetrics = (
   ttftMs: number | null,
   elapsedMs: number,
   usage: UsageSnapshot,
+  deltaCount: number,
 ): StreamMetrics => ({
   ttftMs,
   elapsedMs,
   inputTokens: usage.inputTokens,
   outputTokens: usage.outputTokens,
   totalTokens: usage.totalTokens,
-  tokensPerSecond: tokensPerSecond(usage.outputTokens, ttftMs, elapsedMs),
+  tokensPerSecond: tokensPerSecond(usage.outputTokens, ttftMs, elapsedMs, deltaCount),
   costUsd: usage.costUsd,
 });
 
@@ -94,13 +129,14 @@ const logModelFailure = (modelId: string, error: unknown): void => {
  * exception that tears the response down.
  */
 export async function* streamModelAnswer(
-  request: ChatRequest,
+  request: ModelCall,
   abortSignal: AbortSignal,
 ): AsyncGenerator<ChatStreamEvent> {
   const startedAt = Date.now();
   const since = (): number => Date.now() - startedAt;
 
   let ttftMs: number | null = null;
+  let deltaCount = 0;
   let usage: UsageSnapshot = noUsage;
   let finishReason = "unknown";
   let failure: string | null = null;
@@ -117,9 +153,13 @@ export async function* streamModelAnswer(
 
     for await (const part of result.fullStream) {
       if (part.type === "text-delta") {
+        deltaCount += 1;
         if (ttftMs === null) {
           ttftMs = since();
-          yield { type: "metrics", metrics: buildMetrics(ttftMs, since(), usage) };
+          yield {
+            type: "metrics",
+            metrics: buildMetrics(ttftMs, since(), usage, deltaCount),
+          };
         }
         yield { type: "delta", text: part.text };
         continue;
@@ -158,7 +198,7 @@ export async function* streamModelAnswer(
     failure = toHumanErrorMessage(error);
   }
 
-  yield { type: "metrics", metrics: buildMetrics(ttftMs, since(), usage) };
+  yield { type: "metrics", metrics: buildMetrics(ttftMs, since(), usage, deltaCount) };
 
   yield failure === null
     ? { type: "done", finishReason }

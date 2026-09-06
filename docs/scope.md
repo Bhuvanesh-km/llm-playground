@@ -23,7 +23,7 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 | 3   | Data model                                  | Foundation | done                     |
 | 4   | Design & look                               | Foundation | done                     |
 | 5   | Model picker                                | Slice 1    | done                     |
-| 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started              |
+| 6   | Send a prompt, parallel streams, and voting | Slice 1    | 6a done; 6b, 6c open     |
 | 7   | App shell & thread history                  | Slice 2    | not started              |
 | 8   | Public thread visibility & sharing          | Slice 3    | not started              |
 | 9   | Leaderboard: global & personal              | Slice 4    | not started              |
@@ -317,8 +317,37 @@ Arcjet sits in front of this endpoint before any model is ever called: rate limi
 
 Every prompt sent, every answer finishing, and every vote cast should be tracked as a real PostHog event, so there's an honest funnel from prompt to answer to vote. A model failing should also be logged properly on the server, not just shown to the user and forgotten. Separately from that funnel, every actual model call should also be wrapped so PostHog captures its own real tokens, cost, and latency per call, that's PostHog's own LLM analytics, not the same thing as the funnel events or the numbers already shown on the response card.
 
-- [ ] Decide the approach
-- [ ] Build it
+- [x] Decide the approach
+- [x] 6a, the loop
+- [ ] 6b, voting
+- [ ] 6c, guardrails and the funnel
+
+**A correction to the plan: this feature was too big as written.** It bundled the arena, persistence, follow-ups, voting, Arcjet's real rules, the PostHog funnel and LLM analytics into one step, while the top of this file insists on a thin working slice first. Feature 1 had already set the precedent by splitting. So: **6a** is the loop, **6b** is voting, **6c** is the guardrails and the funnel.
+
+#### 6a build checklist
+
+- [x] `sendPrompt`, a server action creating the thread, turn and one answer per model in a single transaction.
+- [x] The streaming route reworked to take an answer id and nothing else.
+- [x] `conversationFor`, rebuilding each model's own history on the server.
+- [x] `runAnswer`, streaming one answer and recording what happened.
+- [x] The arena: `/` starts a thread, `/t/[threadId]` is the thread.
+- [x] `/dev/stream` and `/dev/auth-check` deleted.
+
+**The server owns the answer row, and that is the whole shape of 6a.** The obvious design, letting the browser post back what it received, would mean an answer is whatever the browser claims it is, and would lose the reply entirely if someone closed the tab mid-stream. Instead the rows exist before a token is streamed, and the browser may only say "run answer X".
+
+**It also closed a hole nobody had reported.** The request used to carry the model id and the entire message array, both client-controlled and both reaching a paid provider. One of those turned out to let any caller bill an arbitrary model to this account. The wire request is now a single answer id, so that class of attack is gone by construction rather than by a check: posting the old shape is refused as malformed. The route additionally scopes the answer to the caller's own threads, so an answer id is not a bearer token for driving somebody else's row.
+
+**A follow-up gets each model's own conversation, and a failed turn contributes no reply.** Every turn adds its prompt; only that model's own completed answers come back as assistant turns. A model that failed on turn two sees turn two's prompt and nothing of its own after it, which is the honest record. Inventing a placeholder would teach the model it had spoken when it had not.
+
+**The row is finalised in a `finally`.** Closing the tab aborts the request and cancels the generator, and without that the row would sit at STREAMING for ever, which 6b's vote rule would read as "still arriving" rather than "abandoned".
+
+#### Two things found by running it
+
+- **Tokens per second was reporting numbers with nothing behind them.** A live call produced 117 tokens across a 29 millisecond window and a reported 4,034 tokens per second. That is not a fast model: some providers buffer the whole answer and deliver it in one chunk, so the first token and the last arrive together and the generating window is never observed. The leaderboard averages this figure, so one fabricated reading would poison a model's standing. It now returns null unless at least two deltas arrived and the window was at least 50ms. A genuine stream still reports normally.
+
+  **This has a consequence for feature 9 that should be decided before building it.** Free-tier models buffer often. Across the verification runs, generating windows of 15ms and 66ms were measured for answers of around 165 tokens, so tokens per second was legitimately unmeasurable on both. The leaderboard's "average tokens/sec" column may be empty far more often than the sketch assumes, and feature 9 should decide what an honest empty column says rather than discovering it later.
+
+- **`pnpm check` had its steps in the wrong order.** ESLint's type-aware rules resolve Next's generated route types too, not just `tsc`, so on a cold `.next` a correct page failed lint with "unsafe assignment of an error typed value". `next typegen` now runs first in both the script and the hook. This is the same fault fixed during feature 3, fixed only for `tsc` at the time because no page used `PageProps` yet.
 
 ## Slice 2: App shell & thread history
 

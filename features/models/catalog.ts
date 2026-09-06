@@ -188,6 +188,39 @@ export const isModelAllowed = async (modelId: string): Promise<ModelAllowed> => 
   return { allowed: true };
 };
 
+export type ResolvedModels =
+  | { readonly ok: true; readonly models: readonly FreeModel[] }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Turns a set of ids into catalogue entries, refusing the whole set if any one
+ * of them is not a model this arena will pay for.
+ *
+ * Callers need both halves of this at once: the permission check, and the
+ * display name to snapshot onto the answer row. Doing it in one pass means the
+ * name written to the database is the one the catalogue actually gave us,
+ * rather than the id standing in for a name nobody ever looked up.
+ */
+export const resolveFreeModels = async (
+  modelIds: readonly string[],
+): Promise<ResolvedModels> => {
+  const catalogue = await fetchFreeModels();
+  if (!catalogue.ok) {
+    return {
+      ok: false,
+      message: "The model list is unavailable right now, so this prompt wasn't sent.",
+    };
+  }
+
+  const resolved = modelIds.map((id) =>
+    catalogue.models.find((model) => model.id === id),
+  );
+
+  return resolved.every((model): model is FreeModel => model !== undefined)
+    ? { ok: true, models: resolved }
+    : { ok: false, message: "That model isn't one this arena can use." };
+};
+
 /** How many models can answer one prompt at once. */
 export const MAX_SELECTED_MODELS = 3;
 

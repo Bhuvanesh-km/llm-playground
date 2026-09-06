@@ -88,14 +88,17 @@ where it can be diagnosed. See `features/chat/error-message.ts`.
 
 `.husky/pre-commit` runs two things:
 
-1. **`lint-staged`** — Prettier and `eslint --fix` across the staged files only,
+1. **`next typegen`** — first, before anything reads the code. It writes the
+   route and layout types (`LayoutProps`, `PageProps`) that cannot be derived
+   from source. **Both** `tsc` and ESLint's type-aware rules resolve them: on a
+   fresh clone with no `.next/`, `tsc` fails with `Cannot find name
+'LayoutProps'` and ESLint reports `unsafe assignment of an error typed value`
+   on a page that is perfectly correct. Neither error points anywhere near the
+   real cause. It was originally placed after ESLint, which only surfaced once a
+   page started using `PageProps`.
+2. **`lint-staged`** — Prettier and `eslint --fix` across the staged files only,
    with the results re-staged. Formatting and auto-fixable lint never bounce a
    commit; they are simply repaired.
-2. **`next typegen`** — writes the route and layout types (`LayoutProps`,
-   `PageProps`) that `tsc` cannot derive on its own. Without it a fresh clone,
-   which has no `.next/`, fails with `Cannot find name 'LayoutProps'`, an error
-   that points nowhere near the real problem. It is in `pnpm typecheck` for the
-   same reason.
 3. **`tsc --noEmit`** — whole-project, and the part that genuinely blocks. A type
    error in a file you did not touch still means the commit is broken, and `tsc`
    has no `--fix`.
