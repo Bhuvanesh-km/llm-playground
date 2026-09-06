@@ -2,6 +2,11 @@
 # re-staged, so a whitespace slip never bounces a commit.
 pnpm exec lint-staged
 
+# `next typegen` first: tsc cannot resolve Next's generated route and layout
+# types on its own, so without this a fresh clone fails the hook with a
+# confusing "Cannot find name 'LayoutProps'" rather than a real error.
+pnpm exec next typegen
+
 # The typecheck is deliberately whole-project and deliberately not auto-fixed.
 # A type error in a file you did not touch is still a broken commit, and
 # `tsc` has no --fix: this is the part that is meant to block.
