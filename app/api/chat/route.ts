@@ -5,6 +5,7 @@ import { analyticsIdentity, type AnalyticsIdentity } from "@/features/auth/curre
 import { aj, toDenial } from "@/lib/arcjet";
 import { streamModelAnswer } from "@/features/chat/openrouter";
 import { chatRequestSchema } from "@/features/chat/request";
+import { isModelAllowed } from "@/features/models/catalog";
 import { serverSentEventHeaders, toServerSentEventStream } from "@/features/chat/sse";
 import { posthog } from "@/lib/posthog-server";
 
@@ -54,6 +55,16 @@ export async function POST(request: Request): Promise<Response> {
       { message: "That request didn't look right. Try sending the prompt again." },
       { status: 400 },
     );
+  }
+
+  // The model has to be one from this app's own free catalogue before anything
+  // reaches OpenRouter. The provider call uses the server's API key, so without
+  // this an unauthenticated caller could post the id of any paid model and have
+  // it billed here. A non-empty string is not a permission.
+  const allowed = await isModelAllowed(parsed.data.modelId);
+  if (!allowed.allowed) {
+    captureRequestError(identity, "model_not_allowed");
+    return Response.json({ message: allowed.message }, { status: 400 });
   }
 
   // Arcjet runs after the body parses and before any model is called, so a
