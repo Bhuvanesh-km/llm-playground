@@ -22,7 +22,7 @@ There are rough hand-drawn sketches for the arena screen, the leaderboard, and t
 | 2   | Coding standards & tooling                  | Foundation | done                     |
 | 3   | Data model                                  | Foundation | done                     |
 | 4   | Design & look                               | Foundation | done                     |
-| 5   | Model picker                                | Slice 1    | not started              |
+| 5   | Model picker                                | Slice 1    | done                     |
 | 6   | Send a prompt, parallel streams, and voting | Slice 1    | not started              |
 | 7   | App shell & thread history                  | Slice 2    | not started              |
 | 8   | Public thread visibility & sharing          | Slice 3    | not started              |
@@ -213,7 +213,9 @@ Five tables: `User`, `Thread`, `Turn`, `Answer`, `Vote`. See `prisma/schema.pris
 
 **`Turn` is a table rather than a flat message list** because it is the unit three separate things hinge on: a vote belongs to a turn, the two-or-more rule is a property of a turn, and the sketch's per-thread record counts votable turns. Replaying one model's own conversation is still simple: every turn's prompt, plus that model's own answers, in `index` order.
 
-**There is no `Model` table, on purpose.** `modelId` is an OpenRouter string from a catalogue that changes underneath us, which this project has already been bitten by once: the proof page's default model id had silently stopped existing. A `Model` table would need syncing against a moving list. Instead each `Answer` carries `modelId` plus a `modelName` snapshot, so a leaderboard row for a model that has since dropped off the free tier can still name itself.
+**There is no `Model` table, on purpose.** `modelId` is an OpenRouter string from a live catalogue of 431 models, 19 of them free, and which models are free changes over time. A `Model` table would need syncing against that moving list for no gain. Instead each `Answer` carries `modelId` plus a `modelName` snapshot, so a leaderboard row for a model that has since dropped off the free tier can still name itself.
+
+**A correction to the evidence originally given for this.** This section used to claim the proof page's default model id, `google/gemma-4-31b-it:free`, had "silently stopped existing", and feature 4's notes repeated it. That was wrong. The model exists, with a 262,144 token context. It was never tested and never observed to fail; it simply did not appear in a top-eight-by-context listing, and that absence was mistaken for removal. The decision above stands on its own reasoning, but the anecdote supporting it was false and is retracted here rather than left in the record.
 
 **The two-or-more rule is application logic, not a database constraint, and this is written down rather than implied.** Postgres cannot express "this row may exist only if two sibling rows completed" without a trigger. What the database really guarantees is one vote per turn, one answer per model per turn, one turn per index, and cascading deletes. Feature 6 owns the rule itself.
 
@@ -259,6 +261,7 @@ Measured rather than eyeballed. The number the brief specifically warned about, 
 #### Five things worth recording
 
 - **shadcn's installer silently broke the palette, and this is why the accent token is called `--rust`.** shadcn ships its own `--accent`, meaning a subtle hover background. The names collided and its init overwrote the interactive colour with `oklch(0.269 0 0)`, a pure grey. It also wrote `--sidebar-primary: oklch(0.488 0.243 264.376)`, an indigo, which the brief rules out under any circumstance. Every shadcn semantic token is now mapped onto this palette by hand, including a warm chart ramp, and the app's own accent has a name shadcn does not use.
+- **One claim in this feature's notes was retracted.** The palette section originally cited a model id that had "silently stopped existing" as precedent. See feature 3: that was a mistaken inference, not an observed failure.
 - **The brief overrode the design skill on one point, deliberately.** That skill flags warm-ground-plus-terracotta as the current tell of AI-generated design, naming `#D97757`. The brief mandates warm brown and rust and the brief wins, so the difference was made on the axes it left free: a saturated iron oxide rather than a soft clay, a deeper oat rather than the usual cream, no serif display, and no monospace.
 - **A dropped `await` is not the only thing type-aware tooling caught.** The `mounted` flag pattern the theme toggle first used tripped `react-hooks/set-state-in-effect`. It is now `useSyncExternalStore`, which states the same thing, returning false on the server and true on the client, with no state set from inside an effect.
 - **`app/globals.css` was overriding the fonts it loaded.** The starter file set `font-family: Arial` on `body`, which beat the font variables `layout.tsx` was loading, so the app rendered in Arial while downloading fonts it never used. The starter home page also used `bg-zinc-50` and `dark:bg-black`, a neutral grey and a true black, contradicting the brief on the one point it is most specific about. Both are gone.
@@ -272,8 +275,32 @@ An "Add model" popover pulling OpenRouter's live free-tier list, sorted by conte
 
 **This feature also owns a security hole that is open until it lands.** `/api/chat` today accepts any nonempty `modelId` and passes it straight to OpenRouter under the server API key, so an unauthenticated caller could name a _paid_ model and bill it to the account. A code review raised it against `features/chat/request.ts`; an interim guard (a `:free` suffix check, or a hardcoded allowlist) was considered and deliberately rejected, because it would be a second source of truth that this feature has to delete again. The catalog is the fix: once it exists, the route must validate `modelId` against the fetched free-tier list server-side and reject anything else, and that validation is not optional polish, it is the whole reason to defer the guard.
 
-- [ ] Decide the approach
-- [ ] Build it
+- [x] Decide the approach
+- [x] Build it
+
+`features/models/catalog.ts` is the one place the catalogue is fetched, and both `/models` and the picker read it. The endpoint is public, so it needs no API key and works signed out. Cached for an hour: the list moves, but not by the minute.
+
+#### Build checklist
+
+- [x] The catalogue module, with a principled free-tier filter and per-item validation.
+- [x] `/models`, the whole list with name, context and pricing.
+- [x] The picker: a popover over the live list, capped at three, defaulting to the three largest contexts, with removable chips.
+- [x] Verified against the live catalogue in a browser, in both themes.
+
+**The free-tier filter is not the `:free` suffix, and this matters.** Filtering on price alone returns 22 models, three of which cannot take part: two Lyria models that emit audio, and `openrouter/free`, a router pseudo-model rather than something you can put in a lane. Filtering on `text->text` is the opposite mistake and drops eight of the nineteen, including models this app has already streamed from, because they accept an image or video alongside the prompt and still answer in text. The filter that describes the real requirement is zero prompt and completion price, output modalities including text and excluding audio, and not in the `openrouter/` namespace. It was checked to select exactly the nineteen the suffix does, so it agrees with OpenRouter's convention without depending on one.
+
+**Sorted by context descending, tie-broken by name.** Three models share a 1,048,576 token context today, so without the tie-break the same list could order itself differently between two renders.
+
+**Per-item parsing, not all-or-nothing.** The response is untrusted external input. One malformed record costs us that record, not the catalogue.
+
+**This settles the cost contradiction left open in 1a.** `CLAUDE.md` says the measured cost is real and should be shown; feature 6 says a response card shows no cost. Both hold once the surfaces are separated. `/models` shows pricing, because there the figure answers "what would this model cost" and is a fact about the catalogue. A response card does not, because there it would be a column of zeroes beside the numbers that actually vary.
+
+**Two bugs caught by looking at it rather than by reading it.**
+
+- The context formatter divided by 1,048,576, so 1,048,576 rendered as "1M" while a round 1,000,000 rendered as "1.0M". The smaller number carried more apparent precision and read as the larger one, on adjacent rows. Units are now decimal throughout with trailing zeroes stripped, so both say "1M", and the exact count moved to a `title`.
+- The picker's list items carried `role="menuitemcheckbox"` inside a plain list, with no `menu` container and no arrow-key handling. That is the same fault a review had just caught in the theme toggle: a role promising a keyboard contract the component does not honour. They are now plain toggle buttons with `aria-pressed`, which is behaviour the browser already provides.
+
+**No search box.** Nineteen models fit in a scrollable list, and a field that filters a list you can already see is one accessory too many.
 
 ### 6. Send a prompt, parallel streams, and voting
 

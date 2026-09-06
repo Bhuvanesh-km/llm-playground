@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { fetchFreeModels } from "@/features/models/catalog";
+import { ModelPickerHarness } from "@/features/models/model-picker-harness";
 import { ThemeToggle } from "@/features/theme/theme-toggle";
 
 /**
@@ -41,7 +43,9 @@ const Section = ({
   </section>
 );
 
-export default function DesignReferencePage() {
+export default async function DesignReferencePage() {
+  const catalogue = await fetchFreeModels();
+
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-12 px-6 py-12">
       <header className="flex flex-wrap items-start justify-between gap-6">
@@ -97,6 +101,14 @@ export default function DesignReferencePage() {
           Tab through these. Every control takes a visible rust focus ring, and the toggle
           above is one tab stop with arrow-key movement.
         </p>
+      </Section>
+
+      <Section title="Model picker">
+        {catalogue.ok ? (
+          <ModelPickerHarness models={catalogue.models} />
+        ) : (
+          <p className="text-danger text-sm">{catalogue.message}</p>
+        )}
       </Section>
 
       <Section title="Lanes, the one structure this product turns on">
